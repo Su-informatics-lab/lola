@@ -7,10 +7,11 @@ Supported Assessments:
 - Ordinal (5 levels): Fatigue and anxiety
 
 Usage:
-    python estimate_prob_given_drug.py --model MODEL_NAME --assessment ASSESSMENT_TYPE [options]
+    python estimate_prob_given_drug.py --model_name MODEL_NAME \
+    --assessment ASSESSMENT_TYPE [options]
 
 Required Arguments:
-    --model          Huggingface model name (e.g., meta-llama/Llama-3.1-70B-Instruct)
+    --model_name     Huggingface model name (e.g., meta-llama/Llama-3.1-70B-Instruct)
     --assessment     Assessment type (diabetes|audit_c|fatigue|anxiety|insurance)
 
 Optional Arguments:
@@ -288,9 +289,9 @@ def generate_single_estimate(
 
 def get_checkpoint_filename(assessment: str, model_name: str, cot: bool) -> str:
     """Generate consistent checkpoint filename."""
-    model_name = model_name.split("/")[-1].lower()
+    _model_name = model_name.split("/")[-1].lower()
     cot_suffix = "_cot" if cot else ""
-    return f"{assessment}_{model_name}{cot_suffix}.parquet"
+    return f"{assessment}_{_model_name}{cot_suffix}.parquet"
 
 
 def load_checkpoint(filename: str) -> Tuple[pd.DataFrame, Set[str]]:
@@ -307,6 +308,7 @@ def estimate_probabilities(
     drugs: List[str],
     assessment_name: str,
     cot: bool,
+    model_name: str,
     llm: LLM,
     sampling_params: SamplingParams,
     batch_size: int = 1,
@@ -318,12 +320,12 @@ def estimate_probabilities(
     """
     assessment_config = ASSESSMENT_CONFIGS[assessment_name]
 
-    # Setup checkpoint
-    checkpoint_file = get_checkpoint_filename(assessment_name, llm.model, cot)
+    # setup checkpoint
+    checkpoint_file = get_checkpoint_filename(assessment_name, model_name, cot)
     results_df, processed_drugs = load_checkpoint(checkpoint_file)
     all_results = results_df.to_dict("records") if not results_df.empty else []
 
-    # Filter out already processed drugs
+    # filter out already processed drugs
     remaining_drugs = [d for d in drugs if d not in processed_drugs]
 
     if not remaining_drugs:
@@ -342,7 +344,7 @@ def estimate_probabilities(
     if levels[0] is not None:
         logging.info(f"Levels to estimate: {len(levels)}")
 
-    # Create batches of drug-level combinations
+    # create batches of drug-level combinations
     combinations = []
     for drug in remaining_drugs:
         for level in levels:
@@ -453,7 +455,7 @@ def main():
         description="Estimate medical condition probabilities based on drugs."
     )
     parser.add_argument(
-        "--model", type=str, required=True,
+        "--model_name", type=str, required=True,
         help="Huggingface model name to use."
     )
     parser.add_argument(
@@ -492,18 +494,18 @@ def main():
 
     # log the configuration
     logging.info(f"Starting estimation with configuration:")
-    logging.info(f"Model: {args.model}")
+    logging.info(f"Model: {args.model_name}")
     logging.info(f"Assessment: {args.assessment}")
     logging.info(f"Chain of thought: {args.cot}")
     logging.info(f"Number of GPUs: {args.num_gpus}")
     logging.info(f"Batch size: {args.batch_size}")
 
     # get model-specific configuration
-    model_config = get_model_config(args.model)
+    model_config = get_model_config(args.model_name)
 
     # initialize LLM with appropriate configuration
     llm = LLM(
-        model=args.model,
+        model=args.model_name,
         tensor_parallel_size=args.num_gpus,
         dtype=model_config["dtype"],
         quantization=model_config["quantization"],
@@ -525,13 +527,14 @@ def main():
         drugs=drugs,
         assessment_name=args.assessment,
         cot=args.cot,
+        model_name=args.model_name,
         llm=llm,
         sampling_params=sampling_params,
         batch_size=args.batch_size,
     )
 
     # save final results (using same filename as checkpoint)
-    output_file = get_checkpoint_filename(args.assessment, args.model, args.cot)
+    output_file = get_checkpoint_filename(args.assessment, args.model_name, args.cot)
     results_df.to_parquet(output_file, engine="pyarrow")
     logging.info(f"Final results saved to {output_file}")
 
