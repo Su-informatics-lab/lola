@@ -453,7 +453,8 @@ def main():
         description="Estimate medical condition probabilities based on drugs."
     )
     parser.add_argument(
-        "--model", type=str, required=True, help="Huggingface model name to use."
+        "--model", type=str, required=True,
+        help="Huggingface model name to use."
     )
     parser.add_argument(
         "--assessment",
@@ -463,10 +464,12 @@ def main():
         help="Type of assessment to perform.",
     )
     parser.add_argument(
-        "--cot", action="store_true", help="Enable chain-of-thought reasoning."
+        "--cot", action="store_true",
+        help="Enable chain-of-thought reasoning."
     )
     parser.add_argument(
-        "--num_gpus", type=int, default=1, help="Number of GPUs to use."
+        "--num_gpus", type=int, default=1,
+        help="Number of GPUs to use."
     )
     parser.add_argument(
         "--temperature",
@@ -475,16 +478,14 @@ def main():
         help="Temperature parameter for sampling.",
     )
     parser.add_argument(
-        "--batch_size", type=int, default=4, help="Batch size for estimation."
+        "--batch_size", type=int, default=4,
+        help="Batch size for estimation."
     )
     parser.add_argument(
         "--input_file",
         type=str,
-        default="resources/drug_15980.parquet",
+        default="resources/drugs_15980.parquet",
         help="Input file containing drug names.",
-    )
-    parser.add_argument(
-        "--output_prefix", type=str, default="results", help="Prefix for output files."
     )
 
     args = parser.parse_args()
