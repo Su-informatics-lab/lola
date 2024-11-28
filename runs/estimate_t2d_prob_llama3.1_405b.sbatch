@@ -19,12 +19,12 @@ module load CUDA/12.2.0
 python estimate_prob_given_drug.py \
 --model_name meta-llama/Llama-3.1-405B-Instruct \
 --assessment diabetes \
---num_gpus 6 \
+--num_gpus 4 \
 --batch_size 2
 
 python estimate_prob_given_drug.py \
 --model_name meta-llama/Llama-3.1-405B-Instruct \
 --assessment diabetes \
---num_gpus 6 \
+--num_gpus 4 \
 --batch_size 2 \
 --cot
