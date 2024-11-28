@@ -39,6 +39,8 @@ from torch import manual_seed
 from tqdm import tqdm
 import logging
 import sys
+import os
+from datetime import datetime
 
 # set up logging
 logging.basicConfig(
@@ -288,21 +290,48 @@ def generate_single_estimate(
     return None, response_text
 
 
+def get_checkpoint_filename(assessment: str, model_name: str, cot: bool) -> str:
+    """Generate consistent checkpoint filename."""
+    model_name = model_name.split('/')[-1].lower()
+    cot_suffix = "_cot" if cot else ""
+    return f"{assessment}_{model_name}{cot_suffix}.parquet"
+
+def load_checkpoint(filename: str) -> Tuple[pd.DataFrame, Set[str]]:
+    """Load checkpoint if it exists and return processed drugs."""
+    if os.path.exists(filename):
+        df = pd.read_parquet(filename)
+        processed_drugs = set(df['drug'].unique())
+        logging.info(f"Loaded checkpoint with {len(processed_drugs)} processed drugs")
+        return df, processed_drugs
+    return pd.DataFrame(), set()
+
+
 def estimate_probabilities(
         drugs: List[str],
         assessment_name: str,
         cot: bool,
         llm: LLM,
         sampling_params: SamplingParams,
-        batch_size: int = 1
+        batch_size: int = 1,
+        checkpoint_interval: int = 100  # Save every 100 drugs
 ) -> pd.DataFrame:
     """
     Estimate probabilities for the specified assessment across all drugs.
-    Returns a single DataFrame with drug names, probabilities, and full responses.
-    Processes drugs in batches to improve throughput.
+    Supports checkpointing and resumption of processing.
     """
     assessment_config = ASSESSMENT_CONFIGS[assessment_name]
-    all_results = []
+
+    # Setup checkpoint
+    checkpoint_file = get_checkpoint_filename(assessment_name, llm.model, cot)
+    results_df, processed_drugs = load_checkpoint(checkpoint_file)
+    all_results = results_df.to_dict('records') if not results_df.empty else []
+
+    # Filter out already processed drugs
+    remaining_drugs = [d for d in drugs if d not in processed_drugs]
+
+    if not remaining_drugs:
+        logging.info("All drugs have been processed. Using existing results.")
+        return results_df
 
     if assessment_config.query_type == QueryType.BINARY:
         levels = [None]
@@ -310,18 +339,22 @@ def estimate_probabilities(
         levels = assessment_config.levels
 
     logging.info(
-        f"Starting estimation for {len(drugs)} drugs with assessment '{assessment_name}'")
+        f"Starting estimation for {len(remaining_drugs)} remaining drugs with assessment '{assessment_name}'")
     logging.info(f"Assessment type: {assessment_config.query_type.value}")
     if levels[0] is not None:
         logging.info(f"Levels to estimate: {len(levels)}")
 
-    # create batches of drug-level combinations
+    # Create batches of drug-level combinations
     combinations = []
-    for drug in drugs:
+    for drug in remaining_drugs:
         for level in levels:
             combinations.append((drug, level))
 
     # process combinations in batches
+    drugs_since_last_save = 0
+    current_drug = None
+    drug_results = []
+
     for i in tqdm(range(0, len(combinations), batch_size),
                   desc="Processing drug-level combinations",
                   unit="batch"):
@@ -331,14 +364,19 @@ def estimate_probabilities(
             for drug, level in batch
         ]
 
-        # generate estimations for the batch
         outputs = llm.chat(
             messages=batch_conversations,
             sampling_params=sampling_params,
         )
 
-        # process batch outputs
         for (drug, level), output in zip(batch, outputs):
+            if current_drug != drug:
+                if drug_results:  # Save previous drug's results
+                    all_results.extend(drug_results)
+                    drugs_since_last_save += 1
+                current_drug = drug
+                drug_results = []
+
             response_text = output.outputs[0].text
             probability = extract_probability(response_text)
 
@@ -349,13 +387,32 @@ def estimate_probabilities(
                 "probability": probability,
                 "llm_response": response_text
             }
-            all_results.append(result)
+            drug_results.append(result)
+
+            # save checkpoint periodically
+            if drugs_since_last_save >= checkpoint_interval:
+                # add last drug's results
+                all_results.extend(drug_results)
+                drug_results = []
+
+                # create and save checkpoint
+                temp_df = pd.DataFrame(all_results)
+                if assessment_config.query_type == QueryType.BINARY:
+                    temp_df = pivot_binary_results(temp_df)
+                temp_df.to_parquet(checkpoint_file, engine='pyarrow')
+
+                logging.info(f"Checkpoint saved with {len(temp_df)} drugs")
+                drugs_since_last_save = 0
 
         # log progress periodically
         if len(all_results) % 100 == 0:
             logging.info(f"Processed {len(all_results)} total estimations")
 
-    # create DataFrame with all information
+    # add any remaining results
+    if drug_results:
+        all_results.extend(drug_results)
+
+    # create final DataFrame
     results_df = pd.DataFrame(all_results)
 
     # calculate and log some statistics
@@ -365,23 +422,29 @@ def estimate_probabilities(
             f"Found {total_nulls} null probabilities out of {len(results_df)} total estimations "
             f"({total_nulls / len(results_df) * 100:.2f}%)")
 
-    # pivot the DataFrame for binary assessments to make it more compact
+    # pivot the DataFrame for binary assessments
     if assessment_config.query_type == QueryType.BINARY:
-        results_df = pd.pivot_table(
-            results_df,
-            values=['probability', 'llm_response'],
-            index='drug',
-            columns='level',
-            aggfunc='first'
-        ).reset_index()
-
-        # flatten column names
-        results_df.columns = [
-            f"{col[0]}_{col[1]}".rstrip('_probability')
-            for col in results_df.columns
-        ]
+        results_df = pivot_binary_results(results_df)
 
     logging.info(f"Completed estimation. Final dataset shape: {results_df.shape}")
+    return results_df
+
+
+def pivot_binary_results(df: pd.DataFrame) -> pd.DataFrame:
+    """Helper function to pivot binary results into wide format."""
+    results_df = pd.pivot_table(
+        df,
+        values=['probability', 'llm_response'],
+        index='drug',
+        columns='level',
+        aggfunc='first'
+    ).reset_index()
+
+    # Flatten column names
+    results_df.columns = [
+        f"{col[0]}_{col[1]}".rstrip('_probability')
+        for col in results_df.columns
+    ]
     return results_df
 
 
@@ -451,12 +514,10 @@ def main():
         batch_size=args.batch_size
     )
 
-    # save results
-    cot_suffix = "_cot" if args.cot else ""
-    model_name = args.model.split('/')[-1].lower()
-    output_file = f"{args.assessment}_{model_name}_{cot_suffix}.parquet"
+    # save final results (using same filename as checkpoint)
+    output_file = get_checkpoint_filename(args.assessment, args.model, args.cot)
     results_df.to_parquet(output_file, engine='pyarrow')
-    logging.info(f"Results saved to {output_file}")
+    logging.info(f"Final results saved to {output_file}")
 
 
 if __name__ == "__main__":
