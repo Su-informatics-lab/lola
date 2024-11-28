@@ -187,8 +187,11 @@ def get_model_config(model_name: str) -> Dict:
         },
         "meta-llama/Llama-3.1-405B-Instruct": {
             "max_model_len": MAX_MODEL_LENGTH,
-            "dtype": "int8",  # using 8-bit quantization for 405B model
-            "quantization": "int8",
+            "dtype": "bfloat16",
+            # using 4-bit quantization for 405B model
+            # refer to: https://docs.vllm.ai/en/latest/quantization/bnb.html
+            "quantization": "bitsandbytes",
+            "load_format": "bitsandbytes",
         },
     }
     return configs.get(
