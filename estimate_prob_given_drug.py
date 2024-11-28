@@ -35,7 +35,7 @@ import os
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import pandas as pd
 from torch import manual_seed
@@ -45,10 +45,8 @@ from vllm import LLM, SamplingParams
 # set up logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 MAX_MODEL_LENGTH = 4096
 
@@ -80,8 +78,8 @@ ASSESSMENT_CONFIGS = {
         query_type=QueryType.BINARY,
         question="",
         system_prompt="You are a medical language model designed to estimate the probability that a patient has "
-                      "Type II diabetes based on a specific medicine. Always output your final answer "
-                      "as a float number on a new line starting with 'Estimated Probability:'."
+        "Type II diabetes based on a specific medicine. Always output your final answer "
+        "as a float number on a new line starting with 'Estimated Probability:'.",
     ),
     "audit_c": AssessmentConfig(
         name="high-risk AUDIT-C score",
@@ -112,43 +110,47 @@ ASSESSMENT_CONFIGS = {
 Total score ranges from 0-12. For men, a score of 4+ indicates high-risk drinking.
 For women, a score of 3+ indicates high-risk drinking.""",
         system_prompt="You are a medical language model designed to estimate the probability that a patient has "
-                      "a high-risk AUDIT-C score based on their medication. A high-risk score is 4+ for men and 3+ for women. "
-                      "Always output your final answer as a float number on a new line starting with 'Estimated Probability:'."
+        "a high-risk AUDIT-C score based on their medication. A high-risk score is 4+ for men and 3+ for women. "
+        "Always output your final answer as a float number on a new line starting with 'Estimated Probability:'.",
     ),
     "fatigue": AssessmentConfig(
         name="fatigue level",
         query_type=QueryType.ORDINAL,
         question="In the past 7 days, how would you rate your fatigue?",
-        levels=['Average Fatigue 7 Days: None',
-                'Average Fatigue 7 Days: Mild',
-                'Average Fatigue 7 Days: Moderate',
-                'Average Fatigue 7 Days: Severe',
-                'Average Fatigue 7 Days: Very Severe'],
+        levels=[
+            "Average Fatigue 7 Days: None",
+            "Average Fatigue 7 Days: Mild",
+            "Average Fatigue 7 Days: Moderate",
+            "Average Fatigue 7 Days: Severe",
+            "Average Fatigue 7 Days: Very Severe",
+        ],
         system_prompt="You are a medical language model designed to estimate the probability that a patient reports "
-                      "a specific level of fatigue in the past 7 days based on their medication. "
-                      "Always output your final answer as a float number on a new line starting with 'Estimated Probability:'."
+        "a specific level of fatigue in the past 7 days based on their medication. "
+        "Always output your final answer as a float number on a new line starting with 'Estimated Probability:'.",
     ),
     "anxiety": AssessmentConfig(
         name="emotional problems",
         query_type=QueryType.ORDINAL,
         question="In the past 7 days, how often have you been bothered by emotional problems such as feeling anxious, depressed or irritable?",
-        levels=['Emotional Problem 7 Days: Never',
-                'Emotional Problem 7 Days: Rarely',
-                'Emotional Problem 7 Days: Sometimes',
-                'Emotional Problem 7 Days: Often',
-                'Emotional Problem 7 Days: Always'],
+        levels=[
+            "Emotional Problem 7 Days: Never",
+            "Emotional Problem 7 Days: Rarely",
+            "Emotional Problem 7 Days: Sometimes",
+            "Emotional Problem 7 Days: Often",
+            "Emotional Problem 7 Days: Always",
+        ],
         system_prompt="You are a medical language model designed to estimate the probability that a patient reports "
-                      "a specific frequency of emotional problems in the past 7 days based on their medication. "
-                      "Always output your final answer as a float number on a new line starting with 'Estimated Probability:'."
+        "a specific frequency of emotional problems in the past 7 days based on their medication. "
+        "Always output your final answer as a float number on a new line starting with 'Estimated Probability:'.",
     ),
     "insurance": AssessmentConfig(
         name="employer-based insurance",
         query_type=QueryType.BINARY,
         question="",
         system_prompt="You are a medical language model designed to estimate the probability that a patient has "
-                      "employer-based insurance based on their medication. "
-                      "Always output your final answer as a float number on a new line starting with 'Estimated Probability:'."
-    )
+        "employer-based insurance based on their medication. "
+        "Always output your final answer as a float number on a new line starting with 'Estimated Probability:'.",
+    ),
 }
 
 
@@ -160,63 +162,54 @@ def get_model_config(model_name: str) -> Dict:
         "meta-llama/Llama-2-7b-chat-hf": {
             "max_model_len": MAX_MODEL_LENGTH,
             "dtype": "bfloat16",
-            "quantization": None
+            "quantization": None,
         },
         "meta-llama/Llama-2-13b-chat-hf": {
             "max_model_len": MAX_MODEL_LENGTH,
             "dtype": "bfloat16",
-            "quantization": None
+            "quantization": None,
         },
         "meta-llama/Llama-2-70b-chat-hf": {
             "max_model_len": MAX_MODEL_LENGTH,
             "dtype": "bfloat16",
-            "quantization": None
+            "quantization": None,
         },
         "meta-llama/Llama-3.1-8B-Instruct": {
             "max_model_len": MAX_MODEL_LENGTH,
             "dtype": "bfloat16",
-            "quantization": None
+            "quantization": None,
         },
         "meta-llama/Llama-3.1-70B-Instruct": {
             "max_model_len": MAX_MODEL_LENGTH,
             "dtype": "bfloat16",
-            "quantization": None
+            "quantization": None,
         },
         "meta-llama/Llama-3.1-405B-Instruct": {
             "max_model_len": MAX_MODEL_LENGTH,
             "dtype": "int8",  # using 8-bit quantization for 405B model
-            "quantization": "int8"
-        }
+            "quantization": "int8",
+        },
     }
-    return configs.get(model_name, {
-        "max_model_len": MAX_MODEL_LENGTH,
-        "dtype": "bfloat16",
-        "quantization": None
-    })
+    return configs.get(
+        model_name,
+        {"max_model_len": MAX_MODEL_LENGTH, "dtype": "bfloat16", "quantization": None},
+    )
 
 
-def create_conversation(drug: str, assessment_config: AssessmentConfig,
-                        level: Optional[str], cot: bool) -> List[Dict]:
+def create_conversation(
+    drug: str, assessment_config: AssessmentConfig, level: Optional[str], cot: bool
+) -> List[Dict]:
     """Create a conversation template for the given drug and assessment configuration."""
     prompt = assessment_config.create_prompt(drug, level)
-    cot_suffix = (
-        "You may think aloud and reason step-by-step. "
-        if cot else ""
-    )
+    cot_suffix = "You may think aloud and reason step-by-step. " if cot else ""
     format_suffix = (
         "You should provide the final answer on a new line in the format: "
         "'Estimated Probability: X', where X is the probability."
     )
 
     return [
-        {
-            "role": "system",
-            "content": assessment_config.system_prompt
-        },
-        {
-            "role": "user",
-            "content": prompt + cot_suffix + format_suffix
-        }
+        {"role": "system", "content": assessment_config.system_prompt},
+        {"role": "user", "content": prompt + cot_suffix + format_suffix},
     ]
 
 
@@ -229,8 +222,9 @@ def is_valid_probability(prob: Optional[float]) -> bool:
 
 def extract_probability(response_text: str) -> Optional[float]:
     """Extract probability from LLM response text."""
-    probability_line = [line for line in response_text.split("\n")
-                        if "Estimated Probability" in line]
+    probability_line = [
+        line for line in response_text.split("\n") if "Estimated Probability" in line
+    ]
     if not probability_line:
         return None
 
@@ -242,13 +236,13 @@ def extract_probability(response_text: str) -> Optional[float]:
 
 
 def generate_single_estimate(
-        drug: str,
-        level: Optional[str],
-        assessment_config: AssessmentConfig,
-        cot: bool,
-        llm: LLM,
-        sampling_params: SamplingParams,
-        max_retries: int = 100
+    drug: str,
+    level: Optional[str],
+    assessment_config: AssessmentConfig,
+    cot: bool,
+    llm: LLM,
+    sampling_params: SamplingParams,
+    max_retries: int = 100,
 ) -> Tuple[Optional[float], str]:
     """
     Generate a single probability estimate with retry logic for invalid outputs.
@@ -258,21 +252,20 @@ def generate_single_estimate(
 
     for attempt in range(max_retries):
         if attempt > 0:
-            logging.warning(f"Retry {attempt}/{max_retries - 1} for drug '{drug}' "
-                            f"(level: {level if level else 'binary'})")
+            logging.warning(
+                f"Retry {attempt}/{max_retries - 1} for drug '{drug}' "
+                f"(level: {level if level else 'binary'})"
+            )
 
         # modify seed for retry attempts
         current_params = SamplingParams(
             temperature=sampling_params.temperature,
             top_p=sampling_params.top_p,
             max_tokens=sampling_params.max_tokens,
-            random_seed=42 + attempt  # vary seed for each attempt
+            random_seed=42 + attempt,  # vary seed for each attempt
         )
 
-        output = llm.chat(
-            messages=[conversation],
-            sampling_params=current_params
-        )[0]
+        output = llm.chat(messages=[conversation], sampling_params=current_params)[0]
 
         response_text = output.outputs[0].text
         probability = extract_probability(response_text)
@@ -281,39 +274,43 @@ def generate_single_estimate(
             if attempt > 0:
                 logging.info(
                     f"Successfully got valid probability after {attempt + 1} attempts "
-                    f"for drug '{drug}' (level: {level if level else 'binary'})")
+                    f"for drug '{drug}' (level: {level if level else 'binary'})"
+                )
             return probability, response_text
 
     # if all retries failed, return None and the last response
-    logging.error(f"Failed to get valid probability after {max_retries} attempts "
-                  f"for drug '{drug}' (level: {level if level else 'binary'})")
+    logging.error(
+        f"Failed to get valid probability after {max_retries} attempts "
+        f"for drug '{drug}' (level: {level if level else 'binary'})"
+    )
     return None, response_text
 
 
 def get_checkpoint_filename(assessment: str, model_name: str, cot: bool) -> str:
     """Generate consistent checkpoint filename."""
-    model_name = model_name.split('/')[-1].lower()
+    model_name = model_name.split("/")[-1].lower()
     cot_suffix = "_cot" if cot else ""
     return f"{assessment}_{model_name}{cot_suffix}.parquet"
+
 
 def load_checkpoint(filename: str) -> Tuple[pd.DataFrame, Set[str]]:
     """Load checkpoint if it exists and return processed drugs."""
     if os.path.exists(filename):
         df = pd.read_parquet(filename)
-        processed_drugs = set(df['drug'].unique())
+        processed_drugs = set(df["drug"].unique())
         logging.info(f"Loaded checkpoint with {len(processed_drugs)} processed drugs")
         return df, processed_drugs
     return pd.DataFrame(), set()
 
 
 def estimate_probabilities(
-        drugs: List[str],
-        assessment_name: str,
-        cot: bool,
-        llm: LLM,
-        sampling_params: SamplingParams,
-        batch_size: int = 1,
-        checkpoint_interval: int = 100  # Save every 100 drugs
+    drugs: List[str],
+    assessment_name: str,
+    cot: bool,
+    llm: LLM,
+    sampling_params: SamplingParams,
+    batch_size: int = 1,
+    checkpoint_interval: int = 100,  # Save every 100 drugs
 ) -> pd.DataFrame:
     """
     Estimate probabilities for the specified assessment across all drugs.
@@ -324,7 +321,7 @@ def estimate_probabilities(
     # Setup checkpoint
     checkpoint_file = get_checkpoint_filename(assessment_name, llm.model, cot)
     results_df, processed_drugs = load_checkpoint(checkpoint_file)
-    all_results = results_df.to_dict('records') if not results_df.empty else []
+    all_results = results_df.to_dict("records") if not results_df.empty else []
 
     # Filter out already processed drugs
     remaining_drugs = [d for d in drugs if d not in processed_drugs]
@@ -339,7 +336,8 @@ def estimate_probabilities(
         levels = assessment_config.levels
 
     logging.info(
-        f"Starting estimation for {len(remaining_drugs)} remaining drugs with assessment '{assessment_name}'")
+        f"Starting estimation for {len(remaining_drugs)} remaining drugs with assessment '{assessment_name}'"
+    )
     logging.info(f"Assessment type: {assessment_config.query_type.value}")
     if levels[0] is not None:
         logging.info(f"Levels to estimate: {len(levels)}")
@@ -355,10 +353,12 @@ def estimate_probabilities(
     current_drug = None
     drug_results = []
 
-    for i in tqdm(range(0, len(combinations), batch_size),
-                  desc="Processing drug-level combinations",
-                  unit="batch"):
-        batch = combinations[i:i + batch_size]
+    for i in tqdm(
+        range(0, len(combinations), batch_size),
+        desc="Processing drug-level combinations",
+        unit="batch",
+    ):
+        batch = combinations[i : i + batch_size]
         batch_conversations = [
             create_conversation(drug, assessment_config, level, cot)
             for drug, level in batch
@@ -385,7 +385,7 @@ def estimate_probabilities(
                 "drug": drug,
                 "level": level_key,
                 "probability": probability,
-                "llm_response": response_text
+                "llm_response": response_text,
             }
             drug_results.append(result)
 
@@ -399,7 +399,7 @@ def estimate_probabilities(
                 temp_df = pd.DataFrame(all_results)
                 if assessment_config.query_type == QueryType.BINARY:
                     temp_df = pivot_binary_results(temp_df)
-                temp_df.to_parquet(checkpoint_file, engine='pyarrow')
+                temp_df.to_parquet(checkpoint_file, engine="pyarrow")
 
                 logging.info(f"Checkpoint saved with {len(temp_df)} drugs")
                 drugs_since_last_save = 0
@@ -416,11 +416,12 @@ def estimate_probabilities(
     results_df = pd.DataFrame(all_results)
 
     # calculate and log some statistics
-    total_nulls = results_df['probability'].isna().sum()
+    total_nulls = results_df["probability"].isna().sum()
     if total_nulls > 0:
         logging.warning(
             f"Found {total_nulls} null probabilities out of {len(results_df)} total estimations "
-            f"({total_nulls / len(results_df) * 100:.2f}%)")
+            f"({total_nulls / len(results_df) * 100:.2f}%)"
+        )
 
     # pivot the DataFrame for binary assessments
     if assessment_config.query_type == QueryType.BINARY:
@@ -434,41 +435,57 @@ def pivot_binary_results(df: pd.DataFrame) -> pd.DataFrame:
     """Helper function to pivot binary results into wide format."""
     results_df = pd.pivot_table(
         df,
-        values=['probability', 'llm_response'],
-        index='drug',
-        columns='level',
-        aggfunc='first'
+        values=["probability", "llm_response"],
+        index="drug",
+        columns="level",
+        aggfunc="first",
     ).reset_index()
 
     # Flatten column names
     results_df.columns = [
-        f"{col[0]}_{col[1]}".rstrip('_probability')
-        for col in results_df.columns
+        f"{col[0]}_{col[1]}".rstrip("_probability") for col in results_df.columns
     ]
     return results_df
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Estimate medical condition probabilities based on drugs.")
-    parser.add_argument('--model', type=str, required=True,
-                        help='Huggingface model name to use.')
-    parser.add_argument('--assessment', type=str, required=True,
-                        choices=list(ASSESSMENT_CONFIGS.keys()),
-                        help='Type of assessment to perform.')
-    parser.add_argument('--cot', action='store_true',
-                        help='Enable chain-of-thought reasoning.')
-    parser.add_argument('--num_gpus', type=int, default=1,
-                        help='Number of GPUs to use.')
-    parser.add_argument('--temperature', type=float, default=0.6,
-                        help='Temperature parameter for sampling.')
-    parser.add_argument('--batch_size', type=int, default=4,
-                        help='Batch size for estimation.')
-    parser.add_argument('--input_file', type=str,
-                        default='resources/drug_15980.parquet',
-                        help='Input file containing drug names.')
-    parser.add_argument('--output_prefix', type=str, default='results',
-                        help='Prefix for output files.')
+        description="Estimate medical condition probabilities based on drugs."
+    )
+    parser.add_argument(
+        "--model", type=str, required=True, help="Huggingface model name to use."
+    )
+    parser.add_argument(
+        "--assessment",
+        type=str,
+        required=True,
+        choices=list(ASSESSMENT_CONFIGS.keys()),
+        help="Type of assessment to perform.",
+    )
+    parser.add_argument(
+        "--cot", action="store_true", help="Enable chain-of-thought reasoning."
+    )
+    parser.add_argument(
+        "--num_gpus", type=int, default=1, help="Number of GPUs to use."
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.6,
+        help="Temperature parameter for sampling.",
+    )
+    parser.add_argument(
+        "--batch_size", type=int, default=4, help="Batch size for estimation."
+    )
+    parser.add_argument(
+        "--input_file",
+        type=str,
+        default="resources/drug_15980.parquet",
+        help="Input file containing drug names.",
+    )
+    parser.add_argument(
+        "--output_prefix", type=str, default="results", help="Prefix for output files."
+    )
 
     args = parser.parse_args()
 
@@ -489,19 +506,17 @@ def main():
         tensor_parallel_size=args.num_gpus,
         dtype=model_config["dtype"],
         quantization=model_config["quantization"],
-        max_model_len=model_config["max_model_len"]
+        max_model_len=model_config["max_model_len"],
     )
 
     # set up sampling parameters
     sampling_params = SamplingParams(
-        temperature=args.temperature,
-        top_p=0.9,
-        max_tokens=MAX_MODEL_LENGTH
+        temperature=args.temperature, top_p=0.9, max_tokens=MAX_MODEL_LENGTH
     )
 
     # load drug data
-    df = pd.read_parquet(args.input_file, engine='pyarrow')
-    drugs = df['standard_concept_name'].tolist()
+    df = pd.read_parquet(args.input_file, engine="pyarrow")
+    drugs = df["standard_concept_name"].tolist()
     logging.info(f"Loaded {len(drugs)} drugs from {args.input_file}")
 
     # run estimation
@@ -511,12 +526,12 @@ def main():
         cot=args.cot,
         llm=llm,
         sampling_params=sampling_params,
-        batch_size=args.batch_size
+        batch_size=args.batch_size,
     )
 
     # save final results (using same filename as checkpoint)
     output_file = get_checkpoint_filename(args.assessment, args.model, args.cot)
-    results_df.to_parquet(output_file, engine='pyarrow')
+    results_df.to_parquet(output_file, engine="pyarrow")
     logging.info(f"Final results saved to {output_file}")
 
 
