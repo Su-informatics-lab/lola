@@ -20,7 +20,6 @@ Optional Arguments:
     --batch_size    Batch size for estimation (default: 4)
     --input_file    Input parquet file with drug names
         (default: resources/drug_15980.parquet)
-    --output_prefix Output file prefix (default: results)
 
 Output:
     Generates a parquet file containing:
@@ -454,7 +453,8 @@ def main():
 
     # save results
     cot_suffix = "_cot" if args.cot else ""
-    output_file = f"{args.output_prefix}_{args.assessment}{cot_suffix}.parquet"
+    model_name = args.model.split('/')[-1].lower()
+    output_file = f"{args.assessment}_{model_name}_{cot_suffix}.parquet"
     results_df.to_parquet(output_file, engine='pyarrow')
     logging.info(f"Results saved to {output_file}")
 
