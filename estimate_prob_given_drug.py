@@ -291,7 +291,7 @@ def get_checkpoint_filename(assessment: str, model_name: str, cot: bool) -> str:
     """Generate consistent checkpoint filename."""
     _model_name = model_name.split("/")[-1].lower()
     cot_suffix = "_cot" if cot else ""
-    return f"{assessment}_{_model_name}{cot_suffix}.parquet"
+    return f"results/{assessment}_{_model_name}{cot_suffix}.parquet"
 
 
 def load_checkpoint(filename: str) -> Tuple[pd.DataFrame, Set[str]]:
