@@ -2,7 +2,7 @@
 #SBATCH --job-name=estimate_t2d_prob_llama3.1_405b
 ##SBATCH --account=group-jasonclark
 #SBATCH --partition=nextgen-gpu
-#SBATCH --gres=gpu:h100:6
+#SBATCH --gres=gpu:h100:4
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=256G
 #SBATCH --time=2-00:00:00
@@ -20,11 +20,11 @@ python estimate_prob_given_drug.py \
 --model_name meta-llama/Llama-3.1-405B-Instruct \
 --assessment diabetes \
 --num_gpus 6 \
---batch_size 1
+--batch_size 2
 
 python estimate_prob_given_drug.py \
 --model_name meta-llama/Llama-3.1-405B-Instruct \
 --assessment diabetes \
 --num_gpus 6 \
---batch_size 1 \
+--batch_size 2 \
 --cot
