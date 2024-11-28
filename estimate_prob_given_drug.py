@@ -39,6 +39,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple
 
 import pandas as pd
+import torch
 from torch import manual_seed
 from tqdm import tqdm
 from vllm import LLM, SamplingParams
@@ -153,51 +154,6 @@ For women, a score of 3+ indicates high-risk drinking.""",
         "Always output your final answer as a float number on a new line starting with 'Estimated Probability:'.",
     ),
 }
-
-
-def get_model_config(model_name: str) -> Dict:
-    """
-    Get model-specific configuration including quantization settings.
-    """
-    configs = {
-        "meta-llama/Llama-2-7b-chat-hf": {
-            "max_model_len": MAX_MODEL_LENGTH,
-            "dtype": "bfloat16",
-            "quantization": None,
-        },
-        "meta-llama/Llama-2-13b-chat-hf": {
-            "max_model_len": MAX_MODEL_LENGTH,
-            "dtype": "bfloat16",
-            "quantization": None,
-        },
-        "meta-llama/Llama-2-70b-chat-hf": {
-            "max_model_len": MAX_MODEL_LENGTH,
-            "dtype": "bfloat16",
-            "quantization": None,
-        },
-        "meta-llama/Llama-3.1-8B-Instruct": {
-            "max_model_len": MAX_MODEL_LENGTH,
-            "dtype": "bfloat16",
-            "quantization": None,
-        },
-        "meta-llama/Llama-3.1-70B-Instruct": {
-            "max_model_len": MAX_MODEL_LENGTH,
-            "dtype": "bfloat16",
-            "quantization": None,
-        },
-        "meta-llama/Llama-3.1-405B-Instruct": {
-            "max_model_len": MAX_MODEL_LENGTH,
-            "dtype": "bfloat16",
-            # using 4-bit quantization for 405B model
-            # refer to: https://docs.vllm.ai/en/latest/quantization/bnb.html
-            "quantization": "bitsandbytes",
-            "load_format": "bitsandbytes",
-        },
-    }
-    return configs.get(
-        model_name,
-        {"max_model_len": MAX_MODEL_LENGTH, "dtype": "bfloat16", "quantization": None},
-    )
 
 
 def create_conversation(
@@ -376,7 +332,7 @@ def estimate_probabilities(
 
         for (drug, level), output in zip(batch, outputs):
             if current_drug != drug:
-                if drug_results:  # Save previous drug's results
+                if drug_results:  # save previous drug's results
                     all_results.extend(drug_results)
                     drugs_since_last_save += 1
                 current_drug = drug
@@ -503,16 +459,16 @@ def main():
     logging.info(f"Number of GPUs: {args.num_gpus}")
     logging.info(f"Batch size: {args.batch_size}")
 
-    # get model-specific configuration
-    model_config = get_model_config(args.model_name)
-
     # initialize LLM with appropriate configuration
     llm = LLM(
         model=args.model_name,
         tensor_parallel_size=args.num_gpus,
-        dtype=model_config["dtype"],
-        quantization=model_config["quantization"],
-        max_model_len=model_config["max_model_len"],
+        dtype=torch.bfloat16,
+        # use 4-bit quantization for 405B model
+        # refer to: https://docs.vllm.ai/en/latest/quantization/bnb.html
+        quantization='bitsandbytes' if args.model_name == "meta-llama/Llama-3.1-405B-Instruct" else None,
+        load_format='bitsandbytes' if args.model_name == "meta-llama/Llama-3.1-405B-Instruct" else 'auto',
+        max_model_len=MAX_MODEL_LENGTH,
     )
 
     # set up sampling parameters
