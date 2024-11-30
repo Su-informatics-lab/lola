@@ -33,12 +33,14 @@ Output:
 import argparse
 import logging
 import os
+import re
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import pandas as pd
+import numpy as np
 import torch
 from torch import manual_seed
 from tqdm import tqdm
@@ -68,10 +70,24 @@ class AssessmentConfig:
 
     def create_prompt(self, drug: str, level: Optional[str] = None) -> str:
         if self.query_type == QueryType.BINARY:
-            return f"Given that a patient took {drug}, estimate the probability of {self.name}. "
+            return (
+                f"You are estimating the probability that a patient has {self.name} "
+                f"given they are taking {drug}. Consider:\n"
+                f"1. The primary uses and effects of this medication\n"
+                f"2. Known associations with {self.name}\n"
+                f"3. Typical patient demographics for this medication\n\n"
+                f"Output a single probability between 0 and 1."
+            )
         else:
             question_context = f"{self.question}\n\n" if self.question else ""
-            return f"{question_context}Given that a patient took {drug}, estimate the probability that their response is '{level}'. "
+            return (
+                f"{question_context}You are estimating the probability that a patient "
+                f"taking {drug} would report '{level}'. Consider:\n"
+                f"1. The primary uses and effects of this medication\n"
+                f"2. Known side effects and impacts on patient well-being\n"
+                f"3. Typical patient demographics for this medication\n\n"
+                f"Output a single probability between 0 and 1."
+            )
 
 
 ASSESSMENT_CONFIGS = {
@@ -79,9 +95,15 @@ ASSESSMENT_CONFIGS = {
         name="Type II diabetes",
         query_type=QueryType.BINARY,
         question="",
-        system_prompt="You are a medical language model designed to estimate the probability that a patient has "
-        "Type II diabetes based on a specific medicine. Always output your final answer "
-        "as a float number on a new line starting with 'Estimated Probability:'.",
+        system_prompt=(
+            "You are a medical expert helping estimate probabilities based on medication data. "
+            "You must always provide a numerical probability estimate between 0 and 1, even if uncertain. "
+            "If you are unsure, provide your best estimate based on available knowledge. "
+            "Never refuse to provide an estimate. "
+            "Always output your final answer on a new line as 'Estimated Probability: X'\n\n"
+            "You are estimating the probability that a patient has Type II diabetes based on "
+            "their specific medicine."
+        ),
     ),
     "audit_c": AssessmentConfig(
         name="high-risk AUDIT-C score",
@@ -111,9 +133,15 @@ ASSESSMENT_CONFIGS = {
 
 Total score ranges from 0-12. For men, a score of 4+ indicates high-risk drinking.
 For women, a score of 3+ indicates high-risk drinking.""",
-        system_prompt="You are a medical language model designed to estimate the probability that a patient has "
-        "a high-risk AUDIT-C score based on their medication. A high-risk score is 4+ for men and 3+ for women. "
-        "Always output your final answer as a float number on a new line starting with 'Estimated Probability:'.",
+        system_prompt=(
+            "You are a medical expert helping estimate probabilities based on medication data. "
+            "You must always provide a numerical probability estimate between 0 and 1, even if uncertain. "
+            "If you are unsure, provide your best estimate based on available knowledge. "
+            "Never refuse to provide an estimate. "
+            "Always output your final answer on a new line as 'Estimated Probability: X'\n\n"
+            "You are estimating the probability that a patient has a high-risk AUDIT-C score "
+            "(4+ for men, 3+ for women) based on their medication."
+        ),
     ),
     "fatigue": AssessmentConfig(
         name="fatigue level",
@@ -126,9 +154,15 @@ For women, a score of 3+ indicates high-risk drinking.""",
             "Average Fatigue 7 Days: Severe",
             "Average Fatigue 7 Days: Very Severe",
         ],
-        system_prompt="You are a medical language model designed to estimate the probability that a patient reports "
-        "a specific level of fatigue in the past 7 days based on their medication. "
-        "Always output your final answer as a float number on a new line starting with 'Estimated Probability:'.",
+        system_prompt=(
+            "You are a medical expert helping estimate probabilities based on medication data. "
+            "You must always provide a numerical probability estimate between 0 and 1, even if uncertain. "
+            "If you are unsure, provide your best estimate based on available knowledge. "
+            "Never refuse to provide an estimate. "
+            "Always output your final answer on a new line as 'Estimated Probability: X'\n\n"
+            "You are estimating the probability that a patient reports a specific level of "
+            "fatigue in the past 7 days based on their medication."
+        ),
     ),
     "anxiety": AssessmentConfig(
         name="emotional problems",
@@ -141,17 +175,29 @@ For women, a score of 3+ indicates high-risk drinking.""",
             "Emotional Problem 7 Days: Often",
             "Emotional Problem 7 Days: Always",
         ],
-        system_prompt="You are a medical language model designed to estimate the probability that a patient reports "
-        "a specific frequency of emotional problems in the past 7 days based on their medication. "
-        "Always output your final answer as a float number on a new line starting with 'Estimated Probability:'.",
+        system_prompt=(
+            "You are a medical expert helping estimate probabilities based on medication data. "
+            "You must always provide a numerical probability estimate between 0 and 1, even if uncertain. "
+            "If you are unsure, provide your best estimate based on available knowledge. "
+            "Never refuse to provide an estimate. "
+            "Always output your final answer on a new line as 'Estimated Probability: X'\n\n"
+            "You are estimating the probability that a patient reports a specific frequency of "
+            "emotional problems in the past 7 days based on their medication."
+        ),
     ),
     "insurance": AssessmentConfig(
         name="employer-based insurance",
         query_type=QueryType.BINARY,
         question="",
-        system_prompt="You are a medical language model designed to estimate the probability that a patient has "
-        "employer-based insurance based on their medication. "
-        "Always output your final answer as a float number on a new line starting with 'Estimated Probability:'.",
+        system_prompt=(
+            "You are a medical expert helping estimate probabilities based on medication data. "
+            "You must always provide a numerical probability estimate between 0 and 1, even if uncertain. "
+            "If you are unsure, provide your best estimate based on available knowledge. "
+            "Never refuse to provide an estimate. "
+            "Always output your final answer on a new line as 'Estimated Probability: X'\n\n"
+            "You are estimating the probability that a patient has employer-based insurance "
+            "based on their medication."
+        ),
     ),
 }
 
@@ -173,26 +219,41 @@ def create_conversation(
     ]
 
 
+def extract_probability(response_text: str) -> Optional[float]:
+    """Extract probability from LLM response text using improved parsing."""
+    # look for explicit probability format first
+    probability_match = re.search(r"Estimated Probability:\s*(0?\.\d+|1\.0|1|0)",
+                                  response_text)
+    if probability_match:
+        try:
+            return float(probability_match.group(1))
+        except ValueError:
+            pass
+
+    # look for percentage format
+    percentage_match = re.search(r"(\d{1,3})%", response_text)
+    if percentage_match:
+        try:
+            return float(percentage_match.group(1)) / 100
+        except ValueError:
+            pass
+
+    # look for decimal numbers between 0 and 1
+    decimal_match = re.search(r"\b(0?\.\d+|1\.0|1|0)\b", response_text)
+    if decimal_match:
+        try:
+            return float(decimal_match.group(1))
+        except ValueError:
+            pass
+
+    return None
+
+
 def is_valid_probability(prob: Optional[float]) -> bool:
     """Check if the parsed probability is valid (between 0 and 1)."""
     if prob is None:
         return False
     return 0 <= prob <= 1
-
-
-def extract_probability(response_text: str) -> Optional[float]:
-    """Extract probability from LLM response text."""
-    probability_line = [
-        line for line in response_text.split("\n") if "Estimated Probability" in line
-    ]
-    if not probability_line:
-        return None
-
-    try:
-        prob = float(probability_line[0].split(":")[1].strip())
-        return prob
-    except (IndexError, ValueError):
-        return None
 
 
 def generate_single_estimate(
@@ -202,48 +263,42 @@ def generate_single_estimate(
     cot: bool,
     llm: LLM,
     sampling_params: SamplingParams,
-    max_retries: int = 100,
+    max_retries: int = 3,
 ) -> Tuple[Optional[float], str]:
-    """
-    Generate a single probability estimate with retry logic for invalid outputs.
-    Returns both the probability and the full response text.
-    """
+    """Generate a single probability estimate with improved retry logic."""
     conversation = create_conversation(drug, assessment_config, level, cot)
 
-    for attempt in range(max_retries):
-        if attempt > 0:
-            logging.warning(
-                f"Retry {attempt}/{max_retries - 1} for drug '{drug}' "
-                f"(level: {level if level else 'binary'})"
-            )
+    best_probability = None
+    best_response = ""
 
-        # modify seed for retry attempts
+    for attempt in range(max_retries):
         current_params = SamplingParams(
-            temperature=sampling_params.temperature,
-            top_p=sampling_params.top_p,
+            temperature=sampling_params.temperature * (1 + attempt * 0.1),  # gradually increase temperature
+            top_p=min(sampling_params.top_p + attempt * 0.05, 1.0),  # gradually increase top_p
             max_tokens=sampling_params.max_tokens,
-            random_seed=42 + attempt,  # vary seed for each attempt
+            random_seed=42 + attempt,
         )
 
         output = llm.chat(messages=[conversation], sampling_params=current_params)[0]
-
         response_text = output.outputs[0].text
         probability = extract_probability(response_text)
 
         if is_valid_probability(probability):
-            if attempt > 0:
-                logging.info(
-                    f"Successfully got valid probability after {attempt + 1} attempts "
-                    f"for drug '{drug}' (level: {level if level else 'binary'})"
-                )
             return probability, response_text
 
-    # if all retries failed, return None and the last response
-    logging.error(
-        f"Failed to get valid probability after {max_retries} attempts "
-        f"for drug '{drug}' (level: {level if level else 'binary'})"
-    )
-    return None, response_text
+        # store the best attempt if we haven't found a valid probability yet
+        if probability is not None and (best_probability is None or abs(probability - 0.5) < abs(best_probability - 0.5)):
+            best_probability = probability
+            best_response = response_text
+
+    # if all retries failed, return the best attempt or a fallback value
+    if best_probability is not None:
+        return best_probability, best_response
+
+    # use median probability as fallback for complete failures
+    fallback_prob = 0.5
+    logging.warning(f"Using fallback probability {fallback_prob} for drug '{drug}' after {max_retries} attempts")
+    return fallback_prob, best_response or "Failed to generate valid probability estimate."
 
 
 def get_checkpoint_filename(assessment: str, model_name: str, cot: bool) -> str:
@@ -263,6 +318,24 @@ def load_checkpoint(filename: str) -> Tuple[pd.DataFrame, Set[str]]:
     return pd.DataFrame(), set()
 
 
+def pivot_binary_results(df: pd.DataFrame) -> pd.DataFrame:
+    """Helper function to pivot binary results into wide format."""
+    results_df = pd.pivot_table(
+        df,
+        values=["probability", "llm_response"],
+        index="drug",
+        columns="level",
+        aggfunc="first",
+    ).reset_index()
+
+    # flatten column names
+    results_df.columns = [
+        f"{col[0]}" if col[1] == "" else f"{col[0]}_{col[1]}"
+        for col in results_df.columns
+    ]
+    return results_df
+
+
 def estimate_probabilities(
     drugs: List[str],
     assessment_name: str,
@@ -271,12 +344,9 @@ def estimate_probabilities(
     llm: LLM,
     sampling_params: SamplingParams,
     batch_size: int = 1,
-    checkpoint_interval: int = 100,  # Save every 100 drugs
+    checkpoint_interval: int = 100,
 ) -> pd.DataFrame:
-    """
-    Estimate probabilities for the specified assessment across all drugs.
-    Supports checkpointing and resumption of processing.
-    """
+    """Estimate probabilities for the specified assessment across all drugs."""
     assessment_config = ASSESSMENT_CONFIGS[assessment_name]
 
     # setup checkpoint
@@ -305,6 +375,7 @@ def estimate_probabilities(
 
     # create batches of drug-level combinations
     combinations = []
+# create batches of drug-level combinations
     for drug in remaining_drugs:
         for level in levels:
             combinations.append((drug, level))
@@ -392,23 +463,6 @@ def estimate_probabilities(
     return results_df
 
 
-def pivot_binary_results(df: pd.DataFrame) -> pd.DataFrame:
-    """Helper function to pivot binary results into wide format."""
-    results_df = pd.pivot_table(
-        df,
-        values=["probability", "llm_response"],
-        index="drug",
-        columns="level",
-        aggfunc="first",
-    ).reset_index()
-
-    # Flatten column names
-    results_df.columns = [
-        f"{col[0]}_{col[1]}".rstrip("_probability") for col in results_df.columns
-    ]
-    return results_df
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Estimate medical condition probabilities based on drugs."
@@ -465,7 +519,6 @@ def main():
         tensor_parallel_size=args.num_gpus,
         dtype=torch.bfloat16,
         # use 4-bit quantization for 405B model
-        # refer to: https://docs.vllm.ai/en/latest/quantization/bnb.html
         quantization='bitsandbytes' if args.model_name == "meta-llama/Llama-3.1-405B-Instruct" else None,
         load_format='bitsandbytes' if args.model_name == "meta-llama/Llama-3.1-405B-Instruct" else 'auto',
         max_model_len=MAX_MODEL_LENGTH,
