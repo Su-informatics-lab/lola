@@ -37,10 +37,9 @@ import re
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple
 
 import pandas as pd
-import numpy as np
 import torch
 from torch import manual_seed
 from tqdm import tqdm
