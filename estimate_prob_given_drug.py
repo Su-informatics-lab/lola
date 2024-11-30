@@ -71,20 +71,14 @@ class AssessmentConfig:
         if self.query_type == QueryType.BINARY:
             return (
                 f"You are estimating the probability that a patient has {self.name} "
-                f"given they are taking {drug}. Consider:\n"
-                f"1. The primary uses and effects of this medication\n"
-                f"2. Known associations with {self.name}\n"
-                f"3. Typical patient demographics for this medication\n\n"
+                f"given they are taking {drug}.\n"
                 f"Output a single probability between 0 and 1."
             )
         else:
             question_context = f"{self.question}\n\n" if self.question else ""
             return (
                 f"{question_context}You are estimating the probability that a patient "
-                f"taking {drug} would report '{level}'. Consider:\n"
-                f"1. The primary uses and effects of this medication\n"
-                f"2. Known side effects and impacts on patient well-being\n"
-                f"3. Typical patient demographics for this medication\n\n"
+                f"taking {drug} would report '{level}'.\n"
                 f"Output a single probability between 0 and 1."
             )
 
