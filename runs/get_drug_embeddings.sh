@@ -16,7 +16,7 @@ python get_drug_embeddings.py \
     --output_file ${OUTPUT_DIR}/pca/drug_embeddings_8dim.parquet \
     --model_name UFNLP/gatortron-base \
     --embedding_dim 8 \
-    --batch_size 32 \
+    --batch_size 128 \
     --reduction_method pca \
     --cache_file ${CACHE_DIR}/gatortron_base_embed_cache.parquet
 
@@ -26,7 +26,7 @@ python get_drug_embeddings.py \
     --output_file ${OUTPUT_DIR}/pca/drug_embeddings_32dim.parquet \
     --model_name UFNLP/gatortron-base \
     --embedding_dim 32 \
-    --batch_size 32 \
+    --batch_size  128 \
     --reduction_method pca \
     --cache_file ${CACHE_DIR}/gatortron_base_embed_cache.parquet
 
@@ -36,7 +36,7 @@ python get_drug_embeddings.py \
     --output_file ${OUTPUT_DIR}/umap/drug_embeddings_8dim.parquet \
     --model_name UFNLP/gatortron-base \
     --embedding_dim 8 \
-    --batch_size 32 \
+    --batch_size 128 \
     --reduction_method umap \
     --cache_file ${CACHE_DIR}/gatortron_base_embed_cache.parquet
 
@@ -46,7 +46,7 @@ python get_drug_embeddings.py \
     --output_file ${OUTPUT_DIR}/umap/drug_embeddings_32dim.parquet \
     --model_name UFNLP/gatortron-base \
     --embedding_dim 32 \
-    --batch_size 32 \
+    --batch_size 128 \
     --reduction_method umap \
     --cache_file ${CACHE_DIR}/gatortron_base_embed_cache.parquet
 
@@ -56,7 +56,7 @@ python get_drug_embeddings.py \
     --output_file ${OUTPUT_DIR}/autoencoder/drug_embeddings_8dim.parquet \
     --model_name UFNLP/gatortron-base \
     --embedding_dim 8 \
-    --batch_size 32 \
+    --batch_size 128 \
     --reduction_method autoencoder \
     --cache_file ${CACHE_DIR}/gatortron_base_embed_cache.parquet
 
@@ -66,6 +66,6 @@ python get_drug_embeddings.py \
     --output_file ${OUTPUT_DIR}/autoencoder/drug_embeddings_32dim.parquet \
     --model_name UFNLP/gatortron-base \
     --embedding_dim 32 \
-    --batch_size 32 \
+    --batch_size 128 \
     --reduction_method autoencoder \
     --cache_file ${CACHE_DIR}/gatortron_base_embed_cache.parquet
