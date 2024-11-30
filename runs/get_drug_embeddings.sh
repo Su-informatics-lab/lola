@@ -11,7 +11,7 @@ CACHE_DIR=".cache"
 
 # run embeddings generation for different dimensions and reduction methods
 # pca - 8 dimensions
-python generate_drug_embeddings.py \
+python get_drug_embeddings.py \
     --input_file ${INPUT_FILE} \
     --output_file ${OUTPUT_DIR}/pca/drug_embeddings_8dim.parquet \
     --model_name UFNLP/gatortron-base \
@@ -21,7 +21,7 @@ python generate_drug_embeddings.py \
     --cache_file ${CACHE_DIR}/gatortron_base_embed_cache.parquet
 
 # pca - 32 dimensions
-python generate_drug_embeddings.py \
+python get_drug_embeddings.py \
     --input_file ${INPUT_FILE} \
     --output_file ${OUTPUT_DIR}/pca/drug_embeddings_32dim.parquet \
     --model_name UFNLP/gatortron-base \
@@ -31,7 +31,7 @@ python generate_drug_embeddings.py \
     --cache_file ${CACHE_DIR}/gatortron_base_embed_cache.parquet
 
 # umap - 8 dimensions
-python generate_drug_embeddings.py \
+python get_drug_embeddings.py \
     --input_file ${INPUT_FILE} \
     --output_file ${OUTPUT_DIR}/umap/drug_embeddings_8dim.parquet \
     --model_name UFNLP/gatortron-base \
@@ -41,7 +41,7 @@ python generate_drug_embeddings.py \
     --cache_file ${CACHE_DIR}/gatortron_base_embed_cache.parquet
 
 # umap - 32 dimensions
-python generate_drug_embeddings.py \
+python get_drug_embeddings.py \
     --input_file ${INPUT_FILE} \
     --output_file ${OUTPUT_DIR}/umap/drug_embeddings_32dim.parquet \
     --model_name UFNLP/gatortron-base \
@@ -51,7 +51,7 @@ python generate_drug_embeddings.py \
     --cache_file ${CACHE_DIR}/gatortron_base_embed_cache.parquet
 
 # autoencoder - 8 dimensions
-python generate_drug_embeddings.py \
+python get_drug_embeddings.py \
     --input_file ${INPUT_FILE} \
     --output_file ${OUTPUT_DIR}/autoencoder/drug_embeddings_8dim.parquet \
     --model_name UFNLP/gatortron-base \
@@ -61,7 +61,7 @@ python generate_drug_embeddings.py \
     --cache_file ${CACHE_DIR}/gatortron_base_embed_cache.parquet
 
 # autoencoder - 32 dimensions
-python generate_drug_embeddings.py \
+python get_drug_embeddings.py \
     --input_file ${INPUT_FILE} \
     --output_file ${OUTPUT_DIR}/autoencoder/drug_embeddings_32dim.parquet \
     --model_name UFNLP/gatortron-base \
