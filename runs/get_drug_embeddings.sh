@@ -6,7 +6,7 @@ mkdir -p embeddings/autoencoder
 
 # input file placeholder
 INPUT_FILE="gs://fc-secure-19ab668e-266f-4a5f-9c63-febea17b23cf/lola/EMR_HW_11272024.parquet"
-OUTPUT_DIR="gs://fc-secure-19ab668e-266f-4a5f-9c63-febea17b23cf/lola/drug_embeddings"
+OUTPUT_DIR="embeddings"
 CACHE_DIR=".cache"
 
 # run embeddings generation for different dimensions and reduction methods
