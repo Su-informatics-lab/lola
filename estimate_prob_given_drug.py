@@ -59,7 +59,6 @@ class QueryType(Enum):
     BINARY = "binary"
     ORDINAL = "ordinal"
 
-
 @dataclass
 class AssessmentConfig:
     name: str
@@ -148,7 +147,6 @@ def create_conversation(
         {"role": "user", "content": prompt},
     ]
 
-# updated assessment configurations with non-enforcement prompts
 ASSESSMENT_CONFIGS = {
     "diabetes": AssessmentConfig(
         name="Type II diabetes",
