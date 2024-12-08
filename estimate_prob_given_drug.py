@@ -313,7 +313,14 @@ def estimate_probabilities(
 ) -> pd.DataFrame:
     """Main estimation function with improved handling and checkpointing."""
     assessment_config = ASSESSMENT_CONFIGS[assessment_name]
-    checkpoint_file = f"results/{assessment_name}_{model_name.split('/')[-1].lower()}_{'cot' if cot else 'nocot'}.parquet"
+
+    # include both cot and enforce status in ckpt naming
+    model_shortname = model_name.split('/')[-1].lower()
+    status_suffix = '_'.join(filter(None, [
+        'cot' if cot else '',
+        'enforce' if enforce else ''
+    ]))
+    checkpoint_file = f"results/{assessment_name}_{model_shortname}{f'_{status_suffix}' if status_suffix else ''}.parquet"
 
     # load checkpoint if exists
     if os.path.exists(checkpoint_file):
