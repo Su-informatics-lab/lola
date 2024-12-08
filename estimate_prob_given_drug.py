@@ -139,7 +139,7 @@ def create_conversation(
         cot: Whether to include chain-of-thought reasoning
         enforce: Whether to add enforcement language
     """
-    prompt = assessment_config.create_prompt(drug, level, cot, enforce)
+    prompt = assessment_config.create_prompt(drug, level, cot)
     system_prompt = assessment_config.get_system_prompt(enforce)
 
     return [
