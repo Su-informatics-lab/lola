@@ -1,3 +1,37 @@
+"""
+This script estimates the probability of various medical conditions and patient
+characteristics based on medication data using LLMs.
+
+Supported Assessments:
+- Binary: Type II diabetes, AUDIT-C, insurance status
+- Ordinal (5 levels): Fatigue and anxiety
+
+Usage:
+    python estimate_prob_given_drug.py --model_name MODEL_NAME \
+    --assessment ASSESSMENT_TYPE [options]
+
+Required Arguments:
+    --model_name     Huggingface model name (e.g., meta-llama/Llama-3.1-70B-Instruct)
+    --assessment     Assessment type (diabetes|audit_c|fatigue|anxiety|insurance)
+
+Optional Arguments:
+    --cot           Enable chain-of-thought reasoning
+    --enforce       Enforce LLMs to provide estimation even they are uncertain
+    --num_gpus      Number of GPUs for tensor parallelism (default: 1)
+    --temperature   Sampling temperature (default: 0.6)
+    --batch_size    Batch size for estimation (default: 4)
+    --input_file    Input parquet file with drug names
+        (default: resources/drug_15980.parquet)
+
+Output:
+    Generates a parquet file containing:
+    - Drug names
+    - Estimated probabilities
+    - Full LLM responses
+    - Probabilities for each severity level (only for ordinal assessments)
+"""
+
+
 import argparse
 import logging
 import os
