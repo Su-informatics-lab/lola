@@ -16,7 +16,7 @@ Required Arguments:
 
 Optional Arguments:
     --cot           Enable chain-of-thought reasoning
-    --enforce       Enforce LLMs to provide estimation even they are uncertain
+    --enforce       Enforce LLMs to provide estimation even uncertain
     --num_gpus      Number of GPUs for tensor parallelism (default: 1)
     --temperature   Sampling temperature (default: 0.6)
     --batch_size    Batch size for estimation (default: 4)
@@ -303,21 +303,21 @@ def generate_single_estimate(
     return None, response_text
 
 def estimate_probabilities(
-    drugs: List[str],
-    assessment_name: str,
-    cot: bool,
-    enforce: bool,
-    model_name: str,
-    llm: LLM,
-    sampling_params: SamplingParams,
-    batch_size: int = 1,
-    checkpoint_interval: int = 100,
+        drugs: List[str],
+        assessment_name: str,
+        cot: bool,
+        enforce: bool,
+        model_name: str,
+        llm: LLM,
+        sampling_params: SamplingParams,
+        batch_size: int = 1,
+        checkpoint_interval: int = 100,
 ) -> pd.DataFrame:
     """Main estimation function with improved handling and checkpointing."""
     assessment_config = ASSESSMENT_CONFIGS[assessment_name]
     checkpoint_file = f"results/{assessment_name}_{model_name.split('/')[-1].lower()}_{'cot' if cot else 'nocot'}.parquet"
-    
-    # Load checkpoint if exists
+
+    # load checkpoint if exists
     if os.path.exists(checkpoint_file):
         results_df = pd.read_parquet(checkpoint_file)
         processed_drugs = set(results_df["drug"].unique())
@@ -329,29 +329,37 @@ def estimate_probabilities(
     if not remaining_drugs:
         return results_df
 
-    levels = [None] if assessment_config.query_type == QueryType.BINARY else assessment_config.levels
+    levels = [
+        None] if assessment_config.query_type == QueryType.BINARY else assessment_config.levels
     all_results = []
-    
+
     for i in tqdm(range(0, len(remaining_drugs), batch_size)):
         batch_drugs = remaining_drugs[i:i + batch_size]
-        
+
         for drug in batch_drugs:
             drug_results = []
             for level in levels:
                 probability, response = generate_single_estimate(
                     drug, level, assessment_config, cot, enforce, llm, sampling_params
                 )
-                
-                result = {
-                    "drug": drug,
-                    "level": level if level else "probability",
-                    "probability": probability,
-                    "llm_response": response,
-                }
+
+                if assessment_config.query_type == QueryType.BINARY:
+                    result = {
+                        "drug": drug,
+                        "probability": probability,
+                        "llm_response": response,
+                    }
+                else:
+                    result = {
+                        "drug": drug,
+                        "level": level,
+                        "probability": probability,
+                        "llm_response": response,
+                    }
                 drug_results.append(result)
-            
+
             all_results.extend(drug_results)
-            
+
             # save checkpoint periodically
             if len(all_results) % checkpoint_interval == 0:
                 temp_df = pd.concat([results_df, pd.DataFrame(all_results)])
@@ -361,7 +369,7 @@ def estimate_probabilities(
     # final save
     final_df = pd.concat([results_df, pd.DataFrame(all_results)])
     final_df.to_parquet(checkpoint_file)
-    
+
     return final_df
 
 def main():
@@ -385,7 +393,7 @@ def main():
     )
     parser.add_argument(
         "--enforce", action="store_true",
-        help="Enable chain-of-thought reasoning"
+        help="Enforce LLMs to provide estimation even when uncertain"
     )
     parser.add_argument(
         "--num_gpus", type=int, default=1,
