@@ -39,8 +39,9 @@ import re
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 import torch
 from torch import manual_seed
@@ -101,7 +102,7 @@ class AssessmentConfig:
                 )
 
         if cot:
-            base_prompt += "\nYou may think aloud and reason step-by-step."
+            base_prompt += "\nYou may think aloud and reason step-by-step before reaching the final answer."
 
         return base_prompt
 
@@ -153,10 +154,7 @@ ASSESSMENT_CONFIGS = {
         query_type=QueryType.BINARY,
         question="",
         system_prompt=(
-            "You are a medical language model designed to estimate the probability that a patient has "
-            "Type II diabetes based on a specific medicine. Your goal is to provide the probability as a clear float. "
-            "Please keep your reasoning concise and avoid unnecessary explanations. Always output your final answer "
-            "as a float number on a new line starting with 'Estimated Probability:'"
+            "You are a medical language model designed to estimate the probability that a patient has Type II diabetes based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         ),
     ),
     "audit_c": AssessmentConfig(
@@ -188,9 +186,7 @@ ASSESSMENT_CONFIGS = {
         Total score ranges from 0-12. For men, a score of 4+ indicates high-risk drinking.
         For women, a score of 3+ indicates high-risk drinking.""",
         system_prompt=(
-            "You are a medical language model designed to estimate the probability that a patient has "
-            "a high-risk AUDIT-C score based on their medication. Please provide the probability as a clear float. "
-            "Always output your final answer on a new line starting with 'Estimated Probability:'"
+            "You are a medical language model designed to estimate the probability that a patient has a high-risk AUDIT-C score based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         ),
     ),
     "fatigue": AssessmentConfig(
@@ -205,9 +201,7 @@ ASSESSMENT_CONFIGS = {
             "Very Severe",
         ],
         system_prompt=(
-            "You are a medical language model designed to estimate the probability of different "
-            "fatigue levels based on medication data. Please provide the probability as a clear float. "
-            "Always output your final answer on a new line starting with 'Estimated Probability:'"
+            "You are a medical language model designed to estimate the probability that a patient has a high-risk AUDIT-C score based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         ),
     ),
     "anxiety": AssessmentConfig(
@@ -222,9 +216,7 @@ ASSESSMENT_CONFIGS = {
             "Always",
         ],
         system_prompt=(
-            "You are a medical language model designed to estimate the probability of different "
-            "frequencies of emotional problems based on medication data. Please provide the probability as a clear float. "
-            "Always output your final answer on a new line starting with 'Estimated Probability:'"
+            "You are a medical language model designed to estimate the probability of different frequencies of emotional problems based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         ),
     ),
     "insurance": AssessmentConfig(
@@ -232,73 +224,90 @@ ASSESSMENT_CONFIGS = {
         query_type=QueryType.BINARY,
         question="",
         system_prompt=(
-            "You are a medical language model designed to estimate the probability that a patient has "
-            "employer-based insurance based on their medication. Please provide the probability as a clear float. "
-            "Always output your final answer on a new line starting with 'Estimated Probability:'"
+            "You are a medical language model designed to estimate the probability that a patient has employer-based insurance based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         ),
     ),
 }
 
+
 def extract_probability(response_text: str) -> Optional[float]:
-    """Extract probability from LLM response with improved parsing."""
-    # first look for explicit probability format
-    probability_match = re.search(r"Estimated Probability:\s*(0?\.\d+|1\.0|1|0)", response_text)
-    if probability_match:
-        try:
-            return float(probability_match.group(1))
-        except ValueError:
-            pass
+    """Extract probability from LLM response that uses [ESTIMATION] tags."""
+    if not response_text:
+        return None
 
-    # then look for percentage format
-    percentage_match = re.search(r"(\d{1,3})%", response_text)
-    if percentage_match:
-        try:
-            return float(percentage_match.group(1)) / 100
-        except ValueError:
-            pass
+    tag_match = re.search(r'\[ESTIMATION\](.*?)\[/ESTIMATION\]', response_text,
+                          re.DOTALL)
+    if not tag_match:
+        return None
 
-    # look for decimal numbers between 0 and 1
-    decimal_match = re.search(r"\b(0?\.\d+|1\.0|1|0)\b", response_text)
-    if decimal_match:
-        try:
-            prob = float(decimal_match.group(1))
-            if 0 <= prob <= 1:
-                return prob
-        except ValueError:
-            pass
+    estimation_text = tag_match.group(1).strip()
 
+    try:
+        value = float(estimation_text)
+        # check for nan/inf values explicitly
+        if not np.isfinite(value):
+            return None
+        # validate probability bounds
+        if 0 <= value <= 1:
+            return value
+        return None
+    except ValueError:
+        # handle percentage format
+        percentage_match = re.search(r'(\d+(?:\.\d+)?)%', estimation_text)
+        if percentage_match:
+            try:
+                value = float(percentage_match.group(1)) / 100
+                if np.isfinite(value) and 0 <= value <= 1:
+                    return value
+            except ValueError:
+                pass
     return None
 
+
 def generate_single_estimate(
-    drug: str,
-    level: Optional[str],
-    assessment_config: AssessmentConfig,
-    cot: bool,
-    enforce: bool,
-    llm: LLM,
-    sampling_params: SamplingParams,
-    max_retries: int = 5,
+        drug: str,
+        level: Optional[str],
+        assessment_config: AssessmentConfig,
+        cot: bool,
+        enforce: bool,
+        llm: LLM,
+        sampling_params: SamplingParams,
+        global_seed: int,
 ) -> Tuple[Optional[float], str]:
-    """Generate a single probability estimate with improved handling."""
+    """Generate a single probability estimate with global seed tracking."""
     conversation = create_conversation(drug, assessment_config, level, cot, enforce)
-    
-    for attempt in range(max_retries):
-        current_params = SamplingParams(
-            temperature=sampling_params.temperature * (1 + attempt * 0.1),
-            top_p=min(sampling_params.top_p + attempt * 0.05, 1.0),
-            max_tokens=sampling_params.max_tokens,
-        )
-        
-        output = llm.chat(messages=[conversation], sampling_params=current_params)[0]
-        response_text = output.outputs[0].text
-        probability = extract_probability(response_text)
-        
-        if probability is not None and 0 <= probability <= 1:
-            return probability, response_text
-    
-    # if we couldn't get a valid probability after reties, log warning and return None
-    logging.warning(f"Could not extract valid probability for drug '{drug}' after {max_retries} attempts")
-    return None, response_text
+    MAX_RETRIES = 10
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            current_params = SamplingParams(
+                temperature=sampling_params.temperature,
+                top_p=sampling_params.top_p,
+                max_tokens=sampling_params.max_tokens,
+                seed=global_seed + attempt  # increment from global seed
+            )
+
+            output = llm.chat(messages=[conversation], sampling_params=current_params)[0]
+            if not output or not output.outputs:
+                continue
+
+            response_text = output.outputs[0].text
+            probability = extract_probability(response_text)
+
+            if probability is not None:
+                return probability, response_text
+
+            logging.warning(
+                f"Attempt {attempt + 1}/{MAX_RETRIES}: No valid probability found "
+                f"for drug '{drug}'. Retrying with seed {global_seed + attempt + 1}."
+            )
+
+        except Exception as e:
+            logging.error(f"Error generating estimate for drug '{drug}' with seed {global_seed + attempt}: {str(e)}")
+            continue
+
+    return None, response_text if 'response_text' in locals() else ""
+
 
 def estimate_probabilities(
         drugs: List[str],
@@ -308,34 +317,45 @@ def estimate_probabilities(
         model_name: str,
         llm: LLM,
         sampling_params: SamplingParams,
+        global_seed: int,
         batch_size: int = 1,
         checkpoint_interval: int = 100,
 ) -> pd.DataFrame:
-    """Main estimation function with improved handling and checkpointing."""
-    assessment_config = ASSESSMENT_CONFIGS[assessment_name]
+    """Main estimation function with improved seed tracking."""
+    if not drugs:
+        return pd.DataFrame()
 
-    # include both cot and enforce status in ckpt naming
+    assessment_config = ASSESSMENT_CONFIGS.get(assessment_name)
+    if not assessment_config:
+        raise ValueError(f"Invalid assessment name: {assessment_name}")
+
+    os.makedirs("results", exist_ok=True)
+
     model_shortname = model_name.split('/')[-1].lower()
     status_suffix = '_'.join(filter(None, [
         'cot' if cot else '',
-        'enforce' if enforce else ''
+        'enforce' if enforce else '',
+        f'seed{global_seed}'
     ]))
     checkpoint_file = f"results/{assessment_name}_{model_shortname}{f'_{status_suffix}' if status_suffix else ''}.parquet"
 
-    # load checkpoint if exists
+    # load checkpoint with error handling
+    results_df = pd.DataFrame()
     if os.path.exists(checkpoint_file):
-        results_df = pd.read_parquet(checkpoint_file)
-        processed_drugs = set(results_df["drug"].unique())
-        remaining_drugs = [d for d in drugs if d not in processed_drugs]
+        try:
+            results_df = pd.read_parquet(checkpoint_file)
+            processed_drugs = set(results_df["drug"].unique())
+            remaining_drugs = [d for d in drugs if d not in processed_drugs]
+        except Exception as e:
+            logging.error(f"Error loading checkpoint: {str(e)}")
+            remaining_drugs = drugs
     else:
-        results_df = pd.DataFrame()
         remaining_drugs = drugs
 
     if not remaining_drugs:
         return results_df
 
-    levels = [
-        None] if assessment_config.query_type == QueryType.BINARY else assessment_config.levels
+    levels = [None] if assessment_config.query_type == QueryType.BINARY else assessment_config.levels
     all_results = []
 
     for i in tqdm(range(0, len(remaining_drugs), batch_size)):
@@ -345,35 +365,37 @@ def estimate_probabilities(
             drug_results = []
             for level in levels:
                 probability, response = generate_single_estimate(
-                    drug, level, assessment_config, cot, enforce, llm, sampling_params
+                    drug, level, assessment_config, cot, enforce, llm, sampling_params,
+                    global_seed=global_seed
                 )
 
-                if assessment_config.query_type == QueryType.BINARY:
-                    result = {
-                        "drug": drug,
-                        "probability": probability,
-                        "llm_response": response,
-                    }
-                else:
-                    result = {
-                        "drug": drug,
-                        "level": level,
-                        "probability": probability,
-                        "llm_response": response,
-                    }
+                result = {
+                    "drug": drug,
+                    "probability": probability,
+                    "llm_response": response,
+                    "seed": global_seed,
+                }
+                if assessment_config.query_type == QueryType.ORDINAL:
+                    result["level"] = level
                 drug_results.append(result)
 
             all_results.extend(drug_results)
 
-            # save checkpoint periodically
             if len(all_results) % checkpoint_interval == 0:
-                temp_df = pd.concat([results_df, pd.DataFrame(all_results)])
-                temp_df.to_parquet(checkpoint_file)
-                logging.info(f"Checkpoint saved with {len(temp_df)} total records")
+                try:
+                    temp_df = pd.concat([results_df, pd.DataFrame(all_results)])
+                    temp_df.to_parquet(checkpoint_file)
+                    logging.info(f"Checkpoint saved with {len(temp_df)} total records (seed: {global_seed})")
+                except Exception as e:
+                    logging.error(f"Error saving checkpoint (seed: {global_seed}): {str(e)}")
 
-    # final save
-    final_df = pd.concat([results_df, pd.DataFrame(all_results)])
-    final_df.to_parquet(checkpoint_file)
+    try:
+        final_df = pd.concat([results_df, pd.DataFrame(all_results)])
+        final_df.to_parquet(checkpoint_file)
+        logging.info(f"Final results saved (seed: {global_seed})")
+    except Exception as e:
+        logging.error(f"Error saving final results (seed: {global_seed}): {str(e)}")
+        final_df = pd.concat([results_df, pd.DataFrame(all_results)])
 
     return final_df
 
@@ -418,8 +440,14 @@ def main():
         default="resources/drugs_15980.parquet",
         help="Input file containing drug names",
     )
+    parser.add_argument(
+        "--seed", type=int, default=42,
+        help="Global random seed for reproducibility"
+    )
 
     args = parser.parse_args()
+    manual_seed(args.seed)
+    np.random.seed(args.seed)
 
     logging.info(f"Starting estimation with configuration:")
     logging.info(f"Model: {args.model_name}")
@@ -438,11 +466,12 @@ def main():
         temperature=args.temperature,
         top_p=0.9,
         max_tokens=MAX_MODEL_LENGTH,
+        seed=args.seed
     )
 
     df = pd.read_parquet(args.input_file)
     drugs = df["standard_concept_name"].tolist()
-    
+
     results_df = estimate_probabilities(
         drugs=drugs,
         assessment_name=args.assessment,
@@ -451,11 +480,11 @@ def main():
         model_name=args.model_name,
         llm=llm,
         sampling_params=sampling_params,
+        global_seed=args.seed,
         batch_size=args.batch_size,
     )
 
     logging.info(f"Estimation complete. Final dataset shape: {results_df.shape}")
 
 if __name__ == "__main__":
-    manual_seed(42)
     main()
