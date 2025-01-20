@@ -22,6 +22,8 @@ python estimate_prob_given_drug.py \
 --num_gpus 2 \
 --batch_size 1
 
+sleep 30
+
 python estimate_prob_given_drug.py \
 --model_name meta-llama/Llama-3.1-70B-Instruct \
 --assessment diabetes \
