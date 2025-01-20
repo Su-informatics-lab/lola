@@ -20,7 +20,8 @@ python estimate_prob_given_drug.py \
 --model_name meta-llama/Llama-3.1-405B-Instruct \
 --assessment diabetes \
 --num_gpus 4 \
---batch_size 2
+--batch_size 2 \
+--seed 42
 
 sleep 30
 
@@ -29,4 +30,5 @@ python estimate_prob_given_drug.py \
 --assessment diabetes \
 --num_gpus 4 \
 --batch_size 2 \
---cot
+--cot \
+--seed 42

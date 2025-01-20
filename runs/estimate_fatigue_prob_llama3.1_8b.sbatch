@@ -20,7 +20,8 @@ python estimate_prob_given_drug.py \
 --model_name meta-llama/Llama-3.1-8B-Instruct \
 --assessment fatigue \
 --num_gpus 1 \
---batch_size 4
+--batch_size 4 \
+--seed 42
 
 sleep 30
 
@@ -29,4 +30,5 @@ python estimate_prob_given_drug.py \
 --assessment fatigue \
 --num_gpus 1 \
 --batch_size 4 \
---cot
+--cot \
+--seed 42
