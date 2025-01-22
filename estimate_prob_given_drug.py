@@ -84,21 +84,18 @@ class AssessmentConfig:
             base_prompt = (
                 f"Given that a patient took {drug}, estimate the probability that they have {self.name}."
                 f"{questionnaire_info}"
-                "Please provide your final answer on a new line in the format: "
-                "'Estimated Probability: X', where X is the probability."
+                "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
             )
         else:
             if self.question:
                 base_prompt = (
                     f"For a patient taking {drug}, what is the probability they would report '{level}'?\n\n"
-                    "Please provide your final answer on a new line in the format: "
-                    "'Estimated Probability: X', where X is the probability."
+                    "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
                 )
             else:
                 base_prompt = (
                     f"For a patient taking {drug}, estimate the probability of {level}. "
-                    "Please provide your final answer on a new line in the format: "
-                    "'Estimated Probability: X', where X is the probability."
+                    "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
                 )
 
         if cot:
