@@ -360,3 +360,154 @@ def analyze_cv_results(cv_results):
         mean_val = np.mean(values)
         std_val = np.std(values)
         print(f"{metric.upper()}: {mean_val:.3f} ± {std_val:.3f}")
+
+
+def combine_drug_probabilities(drug_probs, baseline_prob=0.116):
+    """
+    Combine multiple drug-T2D probabilities using log odds ratios.
+    Handle both very high (near 1) and very low (near 0) probabilities.
+
+    Args:
+        drug_probs (list): List of probabilities p(T2D|drug) for each drug
+        baseline_prob (float): Baseline T2D prevalence in population (default: 0.116)
+
+    Returns:
+        float: Combined log odds ratio score
+    """
+    # handle extreme probabilities
+    cleaned_probs = []
+    for p in drug_probs:
+        if p >= 1 - 1e-10:  # handle values too close to 1
+            p = 1 - 1e-10
+        elif p <= 1e-10:  # handle values too close to 0
+            p = 1e-10
+        cleaned_probs.append(p)
+
+    try:
+        # convert each probability to odds ratio relative to baseline
+        odds_ratios = [(p / (1 - p)) / (baseline_prob / (1 - baseline_prob)) for p in
+                       cleaned_probs]
+
+        # convert to log odds, with handling for very small odds ratios
+        log_odds = []
+        for or_ in odds_ratios:
+            if or_ <= 1e-10:  # if odds ratio is extremely small
+                log_odds.append(-10)  # set a floor for extremely negative log odds
+            else:
+                log_odds.append(np.log2(or_))
+
+        # combine by taking the average
+        combined_log_odds = sum(log_odds) / len(log_odds)
+
+        return combined_log_odds
+
+    except Exception as e:
+        print(f"Error processing probabilities: {cleaned_probs}")
+        print(f"Error: {str(e)}")
+        return np.nan
+
+
+def prepare_drug_probabilities(df_drugs, df_assoc, prob_col='probability'):
+    """
+    Prepare and clean drug probability mapping.
+    """
+    # merge drug names with their probabilities
+    merged_df = pd.merge(
+        df_drugs[['standard_concept_name']],
+        df_assoc[[prob_col]],
+        left_index=True,
+        right_index=True
+    )
+
+    # clean the data
+    merged_df = merged_df.dropna()
+    merged_df = merged_df[merged_df[prob_col] <= 1.0]
+
+    # create a dictionary for faster lookup
+    drug_prob_dict = dict(zip(merged_df['standard_concept_name'], merged_df[prob_col]))
+
+    return drug_prob_dict
+
+
+def calculate_combined_probabilities(ml_df, drug_prob_dict,
+                                     target_col='combined_log_odds',
+                                     baseline_prob=0.116, imputation_method='mean'):
+    """
+    Calculate combined log odds ratios for each patient's drug combination.
+
+    Args:
+        ml_df: Machine learning dataframe with patient drug lists
+        drug_prob_dict: Dictionary mapping drugs to their probabilities
+        target_col: Name of column to store combined log odds ratios
+        baseline_prob: Baseline probability for T2D in population
+        imputation_method: Method to impute missing values ('mean', 'zero', or 'median')
+
+    Returns:
+        Modified dataframe with combined log odds ratios and imputed missing values
+    """
+    # initialize the target column
+    ml_df[target_col] = np.nan  # ensure missing values are properly marked
+
+    # iterate through each patient's drug records
+    for idx, row in tqdm(ml_df.iterrows(), total=len(ml_df),
+                         desc=f"Calculating {target_col}"):
+        drug_str = row['standard_concept_name']
+        if not drug_str:
+            continue  # Leave as NaN
+
+        # collect probabilities for all drugs the patient is taking
+        probs = [drug_prob_dict[drug] for drug in drug_str.split('|') if
+                 drug in drug_prob_dict]
+
+        # calculate combined log odds if there are valid probabilities
+        if probs:
+            ml_df.at[idx, target_col] = combine_drug_probabilities(probs, baseline_prob)
+
+    # count missing values
+    n_missing = ml_df[target_col].isna().sum()
+
+    # handle missing values based on chosen imputation method
+    if imputation_method == 'mean':
+        column_mean = ml_df[target_col].mean()
+        ml_df[target_col] = ml_df[target_col].fillna(column_mean)
+        if n_missing > 0:
+            print(
+                f"Imputed {n_missing} missing values with column mean: {column_mean:.4f}")
+
+    elif imputation_method == 'zero':
+        ml_df[target_col] = ml_df[target_col].fillna(0)
+        if n_missing > 0:
+            print(f"Imputed {n_missing} missing values with 0.")
+
+    elif imputation_method == 'median':
+        column_median = ml_df[target_col].median()
+        ml_df[target_col] = ml_df[target_col].fillna(column_median)
+        if n_missing > 0:
+            print(
+                f"Imputed {n_missing} missing values with column median: {column_median:.4f}")
+
+    else:
+        raise ValueError(
+            "Invalid imputation method. Choose 'mean', 'zero', or 'median'.")
+
+    return ml_df
+
+
+def process_drug_combinations(ml_df, df_drugs, df_assoc, prob_col='probability',
+                              target_col='combined_log_odds', baseline_prob=0.116,
+                              imputation_method='mean'):
+    """
+    Process drug combinations and calculate combined log odds ratios.
+    """
+    # work on a copy to prevent modifications to the original ml_df
+    ml_df = ml_df.copy()
+
+    # prepare drug probability dictionary
+    drug_prob_dict = prepare_drug_probabilities(df_drugs, df_assoc, prob_col)
+
+    # calculate combined probabilities and impute missing values
+    ml_df = calculate_combined_probabilities(ml_df, drug_prob_dict, target_col,
+                                             baseline_prob, imputation_method)
+
+    return ml_df
+
