@@ -198,7 +198,7 @@ ASSESSMENT_CONFIGS = {
             "Very Severe",
         ],
         system_prompt=(
-            "You are a medical language model designed to estimate the probability that a patient has a high-risk AUDIT-C score based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
+             "You are a medical language model designed to estimate the probability of different fatigue levels a patient has based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         ),
     ),
     "anxiety": AssessmentConfig(
