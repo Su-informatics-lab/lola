@@ -363,7 +363,7 @@ def analyze_cv_results(cv_results):
         print(f"{metric.upper()}: {mean_val:.3f} ± {std_val:.3f}")
 
 
-def combine_drug_probabilities(drug_probs, baseline_prob=0.116):
+def combine_drug_probabilities(drug_probs, baseline_prob):
     """
     Combine multiple drug-T2D probabilities using log odds ratios.
     Handle both very high (near 1) and very low (near 0) probabilities.
@@ -509,8 +509,13 @@ def process_drug_combinations(ml_df, df_drugs, df_assoc, baseline_prob,
     drug_prob_dict = prepare_drug_probabilities(df_drugs, df_assoc, prob_col)
 
     # calculate combined probabilities and impute missing values
-    ml_df = calculate_combined_probabilities(ml_df, drug_prob_dict, target_col,
-                                             baseline_prob, imputation_method)
+    ml_df = calculate_combined_probabilities(
+        ml_df=ml_df,
+        drug_prob_dict=drug_prob_dict,
+        baseline_prob=baseline_prob,
+        target_col=target_col,
+        imputation_method=imputation_method
+    )
 
     return ml_df
 
