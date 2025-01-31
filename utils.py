@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
@@ -430,8 +431,9 @@ def prepare_drug_probabilities(df_drugs, df_assoc, prob_col='probability'):
 
 
 def calculate_combined_probabilities(ml_df, drug_prob_dict,
+                                     baseline_prob,
                                      target_col='combined_log_odds',
-                                     baseline_prob=0.116, imputation_method='mean'):
+                                     imputation_method='mean'):
     """
     Calculate combined log odds ratios for each patient's drug combination.
 
@@ -493,8 +495,9 @@ def calculate_combined_probabilities(ml_df, drug_prob_dict,
     return ml_df
 
 
-def process_drug_combinations(ml_df, df_drugs, df_assoc, prob_col='probability',
-                              target_col='combined_log_odds', baseline_prob=0.116,
+def process_drug_combinations(ml_df, df_drugs, df_assoc, baseline_prob,
+                              prob_col='probability',
+                              target_col='combined_log_odds',
                               imputation_method='mean'):
     """
     Process drug combinations and calculate combined log odds ratios.
@@ -511,3 +514,20 @@ def process_drug_combinations(ml_df, df_drugs, df_assoc, prob_col='probability',
 
     return ml_df
 
+
+def load_cv_results_parquet(base_path, n_folds):
+    """
+    Load cross-validation results from parquet files.
+
+    Args:
+        base_path: Base path where files were saved (without extension)
+        n_folds: Number of folds to load
+
+    Returns:
+        Dictionary of DataFrames with fold-specific results
+    """
+    cv_results = {}
+    for fold in range(1, n_folds + 1):
+        fold_path = os.path.join(base_path, f"fold{fold}.parquet")
+        cv_results[fold] = pd.read_parquet(fold_path)
+    return cv_results
