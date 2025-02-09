@@ -92,7 +92,7 @@ def assemble_ml_dataset(emr_df, drug_effects_df, label_df, cv_splits_df,
 
 
 def train_and_evaluate_cv_models(ml_df, unique_comorbidities, model_name, target_col,
-                                 with_drug_effect=True, with_llm_cot=False,
+                                 with_drug_effect=False, with_llm_cot=False,
                                  with_llm_no_cot=False,
                                  with_embeddings=False, embedding_prefix='embed_',
                                  robust_scaler=False):
