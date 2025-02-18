@@ -430,13 +430,14 @@ def estimate_probabilities(
 
     return final_df
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Estimate medical condition probabilities based on drugs."
     )
     parser.add_argument(
         "--model_name", type=str, required=True,
-        help="Huggingface model name to use or local model path (e.g., file:///home/username/model_dir)"
+        help="Huggingface model name to use or local model path (e.g., meta-llama/Llama-3.1-70B-Instruct or /home/username/model_dir)"
     )
     parser.add_argument(
         "--assessment",
@@ -445,45 +446,35 @@ def main():
         choices=list(ASSESSMENT_CONFIGS.keys()),
         help="Type of assessment to perform",
     )
-    parser.add_argument(
-        "--cot", action="store_true",
-        help="Enable chain-of-thought reasoning"
-    )
-    parser.add_argument(
-        "--enforce", action="store_true",
-        help="Enforce LLMs to provide estimation even when uncertain"
-    )
-    parser.add_argument(
-        "--num_gpus", type=int, default=1,
-        help="Number of GPUs to use"
-    )
-    parser.add_argument(
-        "--temperature", type=float, default=0.6,
-        help="Temperature parameter for sampling"
-    )
-    parser.add_argument(
-        "--batch_size", type=int, default=4,
-        help="Batch size for estimation"
-    )
-    parser.add_argument(
-        "--input_file",
-        type=str,
-        default="resources/drugs_15980.parquet",
-        help="Input file containing drug names",
-    )
-    parser.add_argument(
-        "--seed", type=int, default=42,
-        help="Global random seed for reproducibility"
-    )
+    parser.add_argument("--cot", action="store_true",
+                        help="Enable chain-of-thought reasoning")
+    parser.add_argument("--enforce", action="store_true",
+                        help="Enforce LLMs to provide estimation even when uncertain")
+    parser.add_argument("--num_gpus", type=int, default=1, help="Number of GPUs to use")
+    parser.add_argument("--temperature", type=float, default=0.6,
+                        help="Temperature parameter for sampling")
+    parser.add_argument("--batch_size", type=int, default=4,
+                        help="Batch size for estimation")
+    parser.add_argument("--input_file", type=str,
+                        default="resources/drugs_15980.parquet",
+                        help="Input file containing drug names")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Global random seed for reproducibility")
 
     args = parser.parse_args()
     manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    # if model_name is an absolute path and not already prefixed with "file://", prepend it.
+    # If model_name is an absolute path and not already prefixed with "file://", add the prefix.
     if os.path.isabs(args.model_name) and not args.model_name.startswith("file://"):
         args.model_name = "file://" + os.path.abspath(args.model_name)
         logging.info(f"Using local model at: {args.model_name}")
+
+    # Strip "file://" for the actual model loading.
+    model_identifier = args.model_name
+    if model_identifier.startswith("file://"):
+        model_identifier = model_identifier[len("file://"):]
+        logging.info(f"Loading local model from: {model_identifier}")
 
     logging.info(f"Starting estimation with configuration:")
     logging.info(f"Model: {args.model_name}")
@@ -492,7 +483,7 @@ def main():
     logging.info(f"Enforce: {args.enforce}")
 
     llm = LLM(
-        model=args.model_name,
+        model=model_identifier,
         tensor_parallel_size=args.num_gpus,
         dtype=torch.bfloat16,
         max_model_len=MAX_MODEL_LENGTH,
@@ -521,6 +512,7 @@ def main():
     )
 
     logging.info(f"Estimation complete. Final dataset shape: {results_df.shape}")
+
 
 if __name__ == "__main__":
     main()
