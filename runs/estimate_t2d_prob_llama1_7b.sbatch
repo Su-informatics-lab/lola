@@ -21,7 +21,8 @@ python estimate_prob_given_drug.py \
 --assessment diabetes \
 --num_gpus 1 \
 --batch_size 4 \
---seed 42
+--seed 42 \
+--max_model_len 2048
 
 sleep 30
 
@@ -31,4 +32,5 @@ python estimate_prob_given_drug.py \
 --num_gpus 1 \
 --batch_size 4 \
 --cot \
---seed 42
+--seed 42 \
+--max_model_len 2048

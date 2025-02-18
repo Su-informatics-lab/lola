@@ -460,6 +460,8 @@ def main():
                         help="Input file containing drug names")
     parser.add_argument("--seed", type=int, default=42,
                         help="Global random seed for reproducibility")
+    parser.add_argument("--max_model_len", type=int, default=4096,
+                        help="Maximum model length. Defaults to 4096 but may need to be lowered (e.g., 2048) based on your model's config.")
 
     args = parser.parse_args()
     manual_seed(args.seed)
@@ -481,18 +483,19 @@ def main():
     logging.info(f"Assessment: {args.assessment}")
     logging.info(f"Chain of thought: {args.cot}")
     logging.info(f"Enforce: {args.enforce}")
+    logging.info(f"Max model length: {args.max_model_len}")
 
     llm = LLM(
         model=model_identifier,
         tensor_parallel_size=args.num_gpus,
         dtype=torch.bfloat16,
-        max_model_len=MAX_MODEL_LENGTH,
+        max_model_len=args.max_model_len,
     )
 
     sampling_params = SamplingParams(
         temperature=args.temperature,
         top_p=0.9,
-        max_tokens=MAX_MODEL_LENGTH,
+        max_tokens=args.max_model_len,
         seed=args.seed
     )
 
