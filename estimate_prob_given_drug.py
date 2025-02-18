@@ -12,7 +12,7 @@ Usage:
 
 Required Arguments:
     --model_name     Huggingface model name (e.g., meta-llama/Llama-3.1-70B-Instruct)
-    --assessment     Assessment type (diabetes|audit_c|fatigue|anxiety|insurance|alcohoc_abuse)
+    --assessment     Assessment type (diabetes|audit_c|fatigue|anxiety|insurance|alcohol_abuse)
 
 Optional Arguments:
     --cot           Enable chain-of-thought reasoning
@@ -223,7 +223,7 @@ ASSESSMENT_CONFIGS = {
             "You are a medical language model designed to estimate the probability that a patient has employer-based insurance based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         ),
     ),
-    "alcohoc_abuse": AssessmentConfig(
+    "alcohol_abuse": AssessmentConfig(
         name="alcohol abuse",
         query_type=QueryType.BINARY,
         question="",
