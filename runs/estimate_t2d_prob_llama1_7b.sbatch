@@ -17,7 +17,7 @@ module load CUDA/12.2.0
 . .venv/bin/activate
 
 python estimate_prob_given_drug.py \
---model_name ~/llama-dl/llama1_7b \
+--model_name ~/llama/llama1_7b \
 --assessment diabetes \
 --num_gpus 1 \
 --batch_size 4 \

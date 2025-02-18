@@ -11,7 +11,7 @@ Usage:
     --assessment ASSESSMENT_TYPE [options]
 
 Required Arguments:
-    --model_name     Huggingface model name or local model path (e.g., meta-llama/Llama-3.1-70B-Instruct or ~/llama-dl/llama1_7b)
+    --model_name     Huggingface model name or local model path (e.g., meta-llama/Llama-3.1-70B-Instruct or ~/llama/llama1_7b)
     --assessment     Assessment type (diabetes|audit_c|fatigue|anxiety|insurance|alcohol_abuse)
 
 Optional Arguments:
