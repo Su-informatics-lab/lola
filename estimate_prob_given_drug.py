@@ -3,7 +3,7 @@ This script estimates the probability of various medical conditions and patient
 characteristics based on medication data using LLMs.
 
 Supported Assessments:
-- Binary: Type II diabetes, AUDIT-C, insurance status
+- Binary: Type II diabetes, AUDIT-C, insurance status, alcohol abuse
 - Ordinal (5 levels): Fatigue and anxiety
 
 Usage:
@@ -12,7 +12,7 @@ Usage:
 
 Required Arguments:
     --model_name     Huggingface model name (e.g., meta-llama/Llama-3.1-70B-Instruct)
-    --assessment     Assessment type (diabetes|audit_c|fatigue|anxiety|insurance)
+    --assessment     Assessment type (diabetes|audit_c|fatigue|anxiety|insurance|alcohoc_abuse)
 
 Optional Arguments:
     --cot           Enable chain-of-thought reasoning
@@ -30,7 +30,6 @@ Output:
     - Full LLM responses
     - Probabilities for each severity level (only for ordinal assessments)
 """
-
 
 import argparse
 import logging
@@ -224,6 +223,37 @@ ASSESSMENT_CONFIGS = {
             "You are a medical language model designed to estimate the probability that a patient has employer-based insurance based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         ),
     ),
+    "alcohoc_abuse": AssessmentConfig(
+        name="alcohol abuse",
+        query_type=QueryType.BINARY,
+        question="",
+        system_prompt=(
+            "You are a medical language model designed to estimate the probability that a patient has alcohol abuse based on the specific medicine they use. "
+            "For this task, refer to the following ICD-10 codes as definitions for alcohol abuse:\n\n"
+            "F10 - Alcohol-related disorders:\n"
+            "  F10.1 Alcohol abuse (F10.10 Uncomplicated, F10.11 In remission, F10.12 With intoxication (uncomplicated, delirium, unspecified), "
+            "F10.13 With withdrawal (uncomplicated, delirium, perceptual disturbance, unspecified), F10.14 With alcohol-induced mood disorder, "
+            "F10.15 With alcohol-induced psychotic disorder (delusions, hallucinations, unspecified), F10.18 With other alcohol-induced disorders "
+            "(anxiety, sexual dysfunction, sleep disorder, other), F10.19 With unspecified alcohol-induced disorder)\n"
+            "  F10.2 Alcohol dependence (F10.20 Uncomplicated, F10.21 In remission, F10.22 With intoxication (uncomplicated, delirium, unspecified), "
+            "F10.23 With withdrawal (uncomplicated, delirium, perceptual disturbance, unspecified), F10.24 With alcohol-induced mood disorder, "
+            "F10.25 With alcohol-induced psychotic disorder (delusions, hallucinations, unspecified), F10.26 With alcohol-induced persisting amnestic disorder, "
+            "F10.27 With alcohol-induced persisting dementia, F10.28 With other alcohol-induced disorders (anxiety, sexual dysfunction, sleep disorder, other), "
+            "F10.29 With unspecified alcohol-induced disorder)\n"
+            "E52 - Niacin deficiency (pellagra)\n"
+            "G62.1 - Alcoholic polyneuropathy\n"
+            "I42.6 - Alcoholic cardiomyopathy\n"
+            "K29.2 - Alcoholic gastritis\n"
+            "K70 - Alcoholic liver disease (K70.0 Fatty liver, K70.3 Cirrhosis of liver, K70.9 Unspecified)\n"
+            "T51 - Toxic effect of alcohol (T51.0 Ethanol, T51.1 Methanol, T51.2 2-Propanol, T51.3 Fusel oil, T51.8 Other alcohols, T51.9 Unspecified alcohol)\n"
+            "Z50.2 - Alcohol rehabilitation\n"
+            "Z71.4 - Alcohol abuse counseling and surveillance\n"
+            "Z72.1 - Alcohol use\n\n"
+            "Estimate the probability that a patient has alcohol abuse based solely on the medication data provided. "
+            "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
+        )
+    ),
+
 }
 
 
