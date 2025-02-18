@@ -11,7 +11,7 @@ Usage:
     --assessment ASSESSMENT_TYPE [options]
 
 Required Arguments:
-    --model_name     Huggingface model name (e.g., meta-llama/Llama-3.1-70B-Instruct)
+    --model_name     Huggingface model name or local model path (e.g., meta-llama/Llama-3.1-70B-Instruct or ~/llama-dl/llama1_7b)
     --assessment     Assessment type (diabetes|audit_c|fatigue|anxiety|insurance|alcohol_abuse)
 
 Optional Arguments:
@@ -21,7 +21,7 @@ Optional Arguments:
     --temperature   Sampling temperature (default: 0.6)
     --batch_size    Batch size for estimation (default: 4)
     --input_file    Input parquet file with drug names
-        (default: resources/drug_15980.parquet)
+        (default: resources/drugs_15980.parquet)
 
 Output:
     Generates a parquet file containing:
@@ -63,12 +63,11 @@ class QueryType(Enum):
 class AssessmentConfig:
     name: str
     query_type: QueryType
-    system_prompt: str
     question: str
+    system_prompt: str
     levels: Optional[List[str]] = None
 
-    def create_prompt(self, drug: str, level: Optional[str] = None, cot: bool = False
-                      ) -> str:
+    def create_prompt(self, drug: str, level: Optional[str] = None, cot: bool = False) -> str:
         """
         Create a simple, direct prompt for the assessment.
 
@@ -262,8 +261,7 @@ def extract_probability(response_text: str) -> Optional[float]:
     if not response_text:
         return None
 
-    tag_match = re.search(r'\[ESTIMATION\](.*?)\[/ESTIMATION\]', response_text,
-                          re.DOTALL)
+    tag_match = re.search(r'\[ESTIMATION\](.*?)\[/ESTIMATION\]', response_text, re.DOTALL)
     if not tag_match:
         return None
 
@@ -358,7 +356,13 @@ def estimate_probabilities(
 
     os.makedirs("results", exist_ok=True)
 
-    model_shortname = model_name.split('/')[-1].lower()
+    # determine model shortname based on whether model_name is a local path or a remote identifier
+    model_path = os.path.expanduser(model_name)
+    if os.path.isdir(model_path):
+        model_shortname = os.path.basename(os.path.normpath(model_path)).lower()
+    else:
+        model_shortname = model_name.split('/')[-1].lower()
+
     status_suffix = '_'.join(filter(None, [
         'cot' if cot else '',
         'enforce' if enforce else '',
@@ -432,7 +436,7 @@ def main():
     )
     parser.add_argument(
         "--model_name", type=str, required=True,
-        help="Huggingface model name to use"
+        help="Huggingface model name or local model path to use"
     )
     parser.add_argument(
         "--assessment",
@@ -480,10 +484,17 @@ def main():
     logging.info(f"Model: {args.model_name}")
     logging.info(f"Assessment: {args.assessment}")
     logging.info(f"Chain of thought: {args.cot}")
-    logging.info(f"Chain of thought: {args.enforce}")
+    logging.info(f"Enforce: {args.enforce}")
+
+    # Expand model path and determine if it's local or remote
+    model_path = os.path.expanduser(args.model_name)
+    if os.path.isdir(model_path):
+        logging.info(f"Loading local model from {model_path}")
+    else:
+        logging.info(f"Loading remote model: {args.model_name}")
 
     llm = LLM(
-        model=args.model_name,
+        model=model_path,
         tensor_parallel_size=args.num_gpus,
         dtype=torch.bfloat16,
         max_model_len=MAX_MODEL_LENGTH,
