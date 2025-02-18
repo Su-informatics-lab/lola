@@ -480,8 +480,8 @@ def main():
     manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    # If model_name is a local path, prepend "file://"
-    if os.path.exists(args.model_name):
+    # if model_name is an absolute path and not already prefixed with "file://", prepend it.
+    if os.path.isabs(args.model_name) and not args.model_name.startswith("file://"):
         args.model_name = "file://" + os.path.abspath(args.model_name)
         logging.info(f"Using local model at: {args.model_name}")
 
