@@ -436,7 +436,7 @@ def main():
     )
     parser.add_argument(
         "--model_name", type=str, required=True,
-        help="Huggingface model name or local model path to use"
+        help="Huggingface model name to use or local model path (e.g., file:///home/username/model_dir)"
     )
     parser.add_argument(
         "--assessment",
@@ -480,21 +480,19 @@ def main():
     manual_seed(args.seed)
     np.random.seed(args.seed)
 
+    # If model_name is a local path, prepend "file://"
+    if os.path.exists(args.model_name):
+        args.model_name = "file://" + os.path.abspath(args.model_name)
+        logging.info(f"Using local model at: {args.model_name}")
+
     logging.info(f"Starting estimation with configuration:")
     logging.info(f"Model: {args.model_name}")
     logging.info(f"Assessment: {args.assessment}")
     logging.info(f"Chain of thought: {args.cot}")
     logging.info(f"Enforce: {args.enforce}")
 
-    # Expand model path and determine if it's local or remote
-    model_path = os.path.expanduser(args.model_name)
-    if os.path.isdir(model_path):
-        logging.info(f"Loading local model from {model_path}")
-    else:
-        logging.info(f"Loading remote model: {args.model_name}")
-
     llm = LLM(
-        model=model_path,
+        model=args.model_name,
         tensor_parallel_size=args.num_gpus,
         dtype=torch.bfloat16,
         max_model_len=MAX_MODEL_LENGTH,
