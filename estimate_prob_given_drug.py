@@ -11,7 +11,7 @@ Usage:
     --assessment ASSESSMENT_TYPE [options]
 
 Required Arguments:
-    --model_name     Huggingface model name or local model path (e.g., meta-llama/Llama-3.1-70B-Instruct or ~/llama/llama1_7b)
+    --model_name     Huggingface model name to use or local model path (e.g., meta-llama/Llama-3.1-70B-Instruct or ~/llama/llama1_7b)
     --assessment     Assessment type (diabetes|audit_c|fatigue|anxiety|insurance|alcohol_abuse)
 
 Optional Arguments:
@@ -22,6 +22,8 @@ Optional Arguments:
     --batch_size    Batch size for estimation (default: 4)
     --input_file    Input parquet file with drug names
         (default: resources/drugs_15980.parquet)
+    --seed          Global random seed for reproducibility (default: 42)
+    --max_model_len Maximum model length. Defaults to 4096 but may need to be lowered (e.g., 2048) based on your model's config.
 
 Output:
     Generates a parquet file containing:
@@ -46,6 +48,9 @@ import torch
 from torch import manual_seed
 from tqdm import tqdm
 from vllm import LLM, SamplingParams
+
+# Additional import for chat template handling.
+from transformers import AutoTokenizer, ChatTemplate
 
 # set up logging
 logging.basicConfig(
@@ -77,7 +82,6 @@ class AssessmentConfig:
             cot: Whether to include chain-of-thought reasoning instruction
         """
         if self.query_type == QueryType.BINARY:
-            # include questionnaire info if available
             questionnaire_info = f"\n\n{self.question}\n\n" if self.question else "\n\n"
             base_prompt = (
                 f"Given that a patient took {drug}, estimate the probability that they have {self.name}."
@@ -143,6 +147,7 @@ def create_conversation(
         {"role": "user", "content": prompt},
     ]
 
+# Assessment configurations
 ASSESSMENT_CONFIGS = {
     "diabetes": AssessmentConfig(
         name="Type II diabetes",
@@ -188,13 +193,7 @@ ASSESSMENT_CONFIGS = {
         name="fatigue level",
         query_type=QueryType.ORDINAL,
         question="In the past 7 days, how would you rate your fatigue?",
-        levels=[
-            "None",
-            "Mild",
-            "Moderate",
-            "Severe",
-            "Very Severe",
-        ],
+        levels=["None", "Mild", "Moderate", "Severe", "Very Severe"],
         system_prompt=(
              "You are a medical language model designed to estimate the probability of different fatigue levels a patient has based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         ),
@@ -203,13 +202,7 @@ ASSESSMENT_CONFIGS = {
         name="emotional problems",
         query_type=QueryType.ORDINAL,
         question="In the past 7 days, how often have you been bothered by emotional problems such as feeling anxious, depressed or irritable?",
-        levels=[
-            "Never",
-            "Rarely",
-            "Sometimes",
-            "Often",
-            "Always",
-        ],
+        levels=["Never", "Rarely", "Sometimes", "Often", "Always"],
         system_prompt=(
             "You are a medical language model designed to estimate the probability of different frequencies of emotional problems based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         ),
@@ -252,9 +245,22 @@ ASSESSMENT_CONFIGS = {
             "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         )
     ),
-
 }
 
+def get_chat_template_from_tokenizer(model_identifier: str):
+    """
+    Attempt to load the model's tokenizer and retrieve its chat template.
+    This leverages Hugging Face's built-in chat templating functionality.
+    """
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model_identifier)
+        # Option 1: Use ChatTemplate.from_pretrained() if available.
+        chat_template = ChatTemplate.from_pretrained(model_identifier)
+        logging.info("Successfully loaded chat template using ChatTemplate.from_pretrained().")
+        return chat_template
+    except Exception as e:
+        logging.error(f"Failed to load chat template from model '{model_identifier}': {e}")
+        raise RuntimeError("No chat template available for this model. Please ensure your model supports chat templating or provide one manually.")
 
 def extract_probability(response_text: str) -> Optional[float]:
     """Extract probability from LLM response that uses [ESTIMATION] tags."""
@@ -269,15 +275,12 @@ def extract_probability(response_text: str) -> Optional[float]:
 
     try:
         value = float(estimation_text)
-        # check for nan/inf values explicitly
         if not np.isfinite(value):
             return None
-        # validate probability bounds
         if 0 <= value <= 1:
             return value
         return None
     except ValueError:
-        # handle percentage format
         percentage_match = re.search(r'(\d+(?:\.\d+)?)%', estimation_text)
         if percentage_match:
             try:
@@ -287,7 +290,6 @@ def extract_probability(response_text: str) -> Optional[float]:
             except ValueError:
                 pass
     return None
-
 
 def generate_single_estimate(
         drug: str,
@@ -309,7 +311,7 @@ def generate_single_estimate(
                 temperature=sampling_params.temperature,
                 top_p=sampling_params.top_p,
                 max_tokens=sampling_params.max_tokens,
-                seed=global_seed + attempt  # increment from global seed
+                seed=global_seed + attempt
             )
 
             output = llm.chat(messages=[conversation], sampling_params=current_params)[0]
@@ -333,7 +335,6 @@ def generate_single_estimate(
 
     return None, response_text if 'response_text' in locals() else ""
 
-
 def estimate_probabilities(
         drugs: List[str],
         assessment_name: str,
@@ -356,7 +357,6 @@ def estimate_probabilities(
 
     os.makedirs("results", exist_ok=True)
 
-    # determine model shortname based on whether model_name is a local path or a remote identifier
     model_path = os.path.expanduser(model_name)
     if os.path.isdir(model_path):
         model_shortname = os.path.basename(os.path.normpath(model_path)).lower()
@@ -370,7 +370,6 @@ def estimate_probabilities(
     ]))
     checkpoint_file = f"results/{assessment_name}_{model_shortname}{f'_{status_suffix}' if status_suffix else ''}.parquet"
 
-    # load checkpoint with error handling
     results_df = pd.DataFrame()
     if os.path.exists(checkpoint_file):
         try:
@@ -391,7 +390,6 @@ def estimate_probabilities(
 
     for i in tqdm(range(0, len(remaining_drugs), batch_size)):
         batch_drugs = remaining_drugs[i:i + batch_size]
-
         for drug in batch_drugs:
             drug_results = []
             for level in levels:
@@ -399,7 +397,6 @@ def estimate_probabilities(
                     drug, level, assessment_config, cot, enforce, llm, sampling_params,
                     global_seed=global_seed
                 )
-
                 result = {
                     "drug": drug,
                     "probability": probability,
@@ -409,7 +406,6 @@ def estimate_probabilities(
                 if assessment_config.query_type == QueryType.ORDINAL:
                     result["level"] = level
                 drug_results.append(result)
-
             all_results.extend(drug_results)
 
             if len(all_results) % checkpoint_interval == 0:
@@ -430,7 +426,6 @@ def estimate_probabilities(
 
     return final_df
 
-
 def main():
     parser = argparse.ArgumentParser(
         description="Estimate medical condition probabilities based on drugs."
@@ -446,20 +441,13 @@ def main():
         choices=list(ASSESSMENT_CONFIGS.keys()),
         help="Type of assessment to perform",
     )
-    parser.add_argument("--cot", action="store_true",
-                        help="Enable chain-of-thought reasoning")
-    parser.add_argument("--enforce", action="store_true",
-                        help="Enforce LLMs to provide estimation even when uncertain")
+    parser.add_argument("--cot", action="store_true", help="Enable chain-of-thought reasoning")
+    parser.add_argument("--enforce", action="store_true", help="Enforce LLMs to provide estimation even when uncertain")
     parser.add_argument("--num_gpus", type=int, default=1, help="Number of GPUs to use")
-    parser.add_argument("--temperature", type=float, default=0.6,
-                        help="Temperature parameter for sampling")
-    parser.add_argument("--batch_size", type=int, default=4,
-                        help="Batch size for estimation")
-    parser.add_argument("--input_file", type=str,
-                        default="resources/drugs_15980.parquet",
-                        help="Input file containing drug names")
-    parser.add_argument("--seed", type=int, default=42,
-                        help="Global random seed for reproducibility")
+    parser.add_argument("--temperature", type=float, default=0.6, help="Temperature parameter for sampling")
+    parser.add_argument("--batch_size", type=int, default=4, help="Batch size for estimation")
+    parser.add_argument("--input_file", type=str, default="resources/drugs_15980.parquet", help="Input file containing drug names")
+    parser.add_argument("--seed", type=int, default=42, help="Global random seed for reproducibility")
     parser.add_argument("--max_model_len", type=int, default=4096,
                         help="Maximum model length. Defaults to 4096 but may need to be lowered (e.g., 2048) based on your model's config.")
 
@@ -485,11 +473,16 @@ def main():
     logging.info(f"Enforce: {args.enforce}")
     logging.info(f"Max model length: {args.max_model_len}")
 
+    # Retrieve the chat template from the model's tokenizer
+    chat_template = get_chat_template_from_tokenizer(model_identifier)
+    logging.info("Chat template loaded from Hugging Face's tokenizer.")
+
     llm = LLM(
         model=model_identifier,
         tensor_parallel_size=args.num_gpus,
         dtype=torch.bfloat16,
         max_model_len=args.max_model_len,
+        chat_template=chat_template,  # rely on the model's built-in chat template
     )
 
     sampling_params = SamplingParams(
@@ -515,7 +508,6 @@ def main():
     )
 
     logging.info(f"Estimation complete. Final dataset shape: {results_df.shape}")
-
 
 if __name__ == "__main__":
     main()
