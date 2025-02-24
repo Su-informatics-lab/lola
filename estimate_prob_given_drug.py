@@ -423,7 +423,7 @@ def main():
     # if using a Gemma1 model, override the architecture in the config
     hf_overrides = None
     if "gemma" in MODEL_NAME_GLOBAL:
-        hf_overrides = '{"architectures": ["GemmaForCausalLM"]}'
+        hf_overrides = {"architectures": ["GemmaForCausalLM"]}
 
     llm = LLM(
         model=args.model_name,
