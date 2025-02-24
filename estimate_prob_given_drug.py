@@ -22,6 +22,8 @@ Optional Arguments:
     --batch_size    Batch size for estimation (default: 4)
     --input_file    Input parquet file with drug names
         (default: resources/drug_15980.parquet)
+    --seed          Global random seed for reproducibility (default: 42)
+    --debug         Enable debug mode (process only first 5 drugs and print responses)
 
 Output:
     Generates a parquet file containing:
@@ -60,7 +62,6 @@ class QueryType(Enum):
     BINARY = "binary"
     ORDINAL = "ordinal"
 
-
 @dataclass
 class AssessmentConfig:
     name: str
@@ -69,18 +70,15 @@ class AssessmentConfig:
     question: str
     levels: Optional[List[str]] = None
 
-    def create_prompt(self, drug: str, level: Optional[str] = None, cot: bool = False
-                      ) -> str:
+    def create_prompt(self, drug: str, level: Optional[str] = None, cot: bool = False) -> str:
         """
         Create a simple, direct prompt for the assessment.
-
         Args:
             drug: Name of the drug
             level: Level for ordinal assessments (optional)
             cot: Whether to include chain-of-thought reasoning instruction
         """
         if self.query_type == QueryType.BINARY:
-            # include questionnaire info if available
             questionnaire_info = f"\n\n{self.question}\n\n" if self.question else "\n\n"
             base_prompt = (
                 f"Given that a patient took {drug}, estimate the probability that they have {self.name}."
@@ -107,12 +105,10 @@ class AssessmentConfig:
     def get_system_prompt(self, enforce: bool = False) -> str:
         """
         Get system prompt with optional enforcement language.
-
         Args:
             enforce: Whether to add enforcement language
         """
         base_system_prompt = self.system_prompt
-
         if enforce:
             enforcement_addition = (
                 " You must always provide a numerical probability estimate between 0 and 1, "
@@ -120,10 +116,7 @@ class AssessmentConfig:
                 "available knowledge. You cannot refuse to provide an estimate."
             )
             base_system_prompt += enforcement_addition
-
         return base_system_prompt
-
-
 
 ASSESSMENT_CONFIGS = {
     "diabetes": AssessmentConfig(
@@ -170,13 +163,7 @@ ASSESSMENT_CONFIGS = {
         name="fatigue level",
         query_type=QueryType.ORDINAL,
         question="In the past 7 days, how would you rate your fatigue?",
-        levels=[
-            "None",
-            "Mild",
-            "Moderate",
-            "Severe",
-            "Very Severe",
-        ],
+        levels=["None", "Mild", "Moderate", "Severe", "Very Severe"],
         system_prompt=(
              "You are a medical language model designed to estimate the probability of different fatigue levels a patient has based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         ),
@@ -185,13 +172,7 @@ ASSESSMENT_CONFIGS = {
         name="emotional problems",
         query_type=QueryType.ORDINAL,
         question="In the past 7 days, how often have you been bothered by emotional problems such as feeling anxious, depressed or irritable?",
-        levels=[
-            "Never",
-            "Rarely",
-            "Sometimes",
-            "Often",
-            "Always",
-        ],
+        levels=["Never", "Rarely", "Sometimes", "Often", "Always"],
         system_prompt=(
             "You are a medical language model designed to estimate the probability of different frequencies of emotional problems based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         ),
@@ -234,9 +215,7 @@ ASSESSMENT_CONFIGS = {
             "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         )
     ),
-
 }
-
 
 def create_conversation(
         drug: str, assessment_config: AssessmentConfig, level: Optional[str], cot: bool,
@@ -247,16 +226,12 @@ def create_conversation(
     For models that do not support a separate system role (e.g., DeepSeek-R1 and Gemma-2),
     prepend the system instruction to the user prompt.
     """
+    system_prompt = assessment_config.get_system_prompt(enforce)
     # get system prompt; if the model is deepseek-r1, add extra directive for chain-of-thought
     # refer to https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-8B
-    system_prompt = assessment_config.get_system_prompt(enforce)
     if "deepseek-r1" in MODEL_NAME_GLOBAL:
         system_prompt += "\nPlease ensure that your answer begins with \"<think>\n\"."
-
-    # reate the base user prompt
     user_prompt = assessment_config.create_prompt(drug, level, cot)
-
-    # prepend system message to user instruction for models that do not support a system role
     if ("deepseek-r1" in MODEL_NAME_GLOBAL) or ("gemma-2" in MODEL_NAME_GLOBAL):
         combined_prompt = f"{system_prompt}\n{user_prompt}"
         return [{"role": "user", "content": combined_prompt}]
@@ -266,30 +241,22 @@ def create_conversation(
             {"role": "user", "content": user_prompt},
         ]
 
-
 def extract_probability(response_text: str) -> Optional[float]:
     """Extract probability from LLM response that uses [ESTIMATION] tags."""
     if not response_text:
         return None
-
-    tag_match = re.search(r'\[ESTIMATION\](.*?)\[/ESTIMATION\]', response_text,
-                          re.DOTALL)
+    tag_match = re.search(r'\[ESTIMATION\](.*?)\[/ESTIMATION\]', response_text, re.DOTALL)
     if not tag_match:
         return None
-
     estimation_text = tag_match.group(1).strip()
-
     try:
         value = float(estimation_text)
-        # check for nan/inf values explicitly
         if not np.isfinite(value):
             return None
-        # validate probability bounds
         if 0 <= value <= 1:
             return value
         return None
     except ValueError:
-        # handle percentage format
         percentage_match = re.search(r'(\d+(?:\.\d+)?)%', estimation_text)
         if percentage_match:
             try:
@@ -299,7 +266,6 @@ def extract_probability(response_text: str) -> Optional[float]:
             except ValueError:
                 pass
     return None
-
 
 def generate_single_estimate(
         drug: str,
@@ -314,37 +280,28 @@ def generate_single_estimate(
     """Generate a single probability estimate with global seed tracking."""
     conversation = create_conversation(drug, assessment_config, level, cot, enforce)
     MAX_RETRIES = 10
-
     for attempt in range(MAX_RETRIES):
         try:
             current_params = SamplingParams(
                 temperature=sampling_params.temperature,
                 top_p=sampling_params.top_p,
                 max_tokens=sampling_params.max_tokens,
-                seed=global_seed + attempt  # increment from global seed
+                seed=global_seed + attempt
             )
-
             output = llm.chat(messages=[conversation], sampling_params=current_params)[0]
             if not output or not output.outputs:
                 continue
-
             response_text = output.outputs[0].text
             probability = extract_probability(response_text)
-
             if probability is not None:
                 return probability, response_text
-
             logging.warning(
-                f"Attempt {attempt + 1}/{MAX_RETRIES}: No valid probability found "
-                f"for drug '{drug}'. Retrying with seed {global_seed + attempt + 1}."
+                f"Attempt {attempt + 1}/{MAX_RETRIES}: No valid probability found for drug '{drug}'. Retrying with seed {global_seed + attempt + 1}."
             )
-
         except Exception as e:
             logging.error(f"Error generating estimate for drug '{drug}' with seed {global_seed + attempt}: {str(e)}")
             continue
-
     return None, response_text if 'response_text' in locals() else ""
-
 
 def estimate_probabilities(
         drugs: List[str],
@@ -361,13 +318,10 @@ def estimate_probabilities(
     """Main estimation function with improved seed tracking."""
     if not drugs:
         return pd.DataFrame()
-
     assessment_config = ASSESSMENT_CONFIGS.get(assessment_name)
     if not assessment_config:
         raise ValueError(f"Invalid assessment name: {assessment_name}")
-
     os.makedirs("results", exist_ok=True)
-
     model_shortname = model_name.split('/')[-1].lower()
     status_suffix = '_'.join(filter(None, [
         'cot' if cot else '',
@@ -388,16 +342,12 @@ def estimate_probabilities(
             remaining_drugs = drugs
     else:
         remaining_drugs = drugs
-
     if not remaining_drugs:
         return results_df
-
     levels = [None] if assessment_config.query_type == QueryType.BINARY else assessment_config.levels
     all_results = []
-
     for i in tqdm(range(0, len(remaining_drugs), batch_size)):
         batch_drugs = remaining_drugs[i:i + batch_size]
-
         for drug in batch_drugs:
             drug_results = []
             for level in levels:
@@ -405,7 +355,6 @@ def estimate_probabilities(
                     drug, level, assessment_config, cot, enforce, llm, sampling_params,
                     global_seed=global_seed
                 )
-
                 result = {
                     "drug": drug,
                     "probability": probability,
@@ -415,9 +364,7 @@ def estimate_probabilities(
                 if assessment_config.query_type == QueryType.ORDINAL:
                     result["level"] = level
                 drug_results.append(result)
-
             all_results.extend(drug_results)
-
             if len(all_results) % checkpoint_interval == 0:
                 try:
                     temp_df = pd.concat([results_df, pd.DataFrame(all_results)])
@@ -425,7 +372,6 @@ def estimate_probabilities(
                     logging.info(f"Checkpoint saved with {len(temp_df)} total records (seed: {global_seed})")
                 except Exception as e:
                     logging.error(f"Error saving checkpoint (seed: {global_seed}): {str(e)}")
-
     try:
         final_df = pd.concat([results_df, pd.DataFrame(all_results)])
         final_df.to_parquet(checkpoint_file)
@@ -433,7 +379,6 @@ def estimate_probabilities(
     except Exception as e:
         logging.error(f"Error saving final results (seed: {global_seed}): {str(e)}")
         final_df = pd.concat([results_df, pd.DataFrame(all_results)])
-
     return final_df
 
 def main():
@@ -441,52 +386,31 @@ def main():
     parser = argparse.ArgumentParser(
         description="Estimate medical condition probabilities based on drugs."
     )
-    parser.add_argument(
-        "--model_name", type=str, required=True,
-        help="Huggingface model name to use"
-    )
-    parser.add_argument(
-        "--assessment",
-        type=str,
-        required=True,
-        choices=list(ASSESSMENT_CONFIGS.keys()),
-        help="Type of assessment to perform",
-    )
-    parser.add_argument(
-        "--cot", action="store_true",
-        help="Enable chain-of-thought reasoning"
-    )
-    parser.add_argument(
-        "--enforce", action="store_true",
-        help="Enforce LLMs to provide estimation even when uncertain"
-    )
-    parser.add_argument(
-        "--num_gpus", type=int, default=1,
-        help="Number of GPUs to use"
-    )
-    parser.add_argument(
-        "--temperature", type=float, default=0.6,
-        help="Temperature parameter for sampling"
-    )
-    parser.add_argument(
-        "--batch_size", type=int, default=4,
-        help="Batch size for estimation"
-    )
-    parser.add_argument(
-        "--input_file",
-        type=str,
-        default="resources/drugs_15980.parquet",
-        help="Input file containing drug names",
-    )
-    parser.add_argument(
-        "--seed", type=int, default=42,
-        help="Global random seed for reproducibility"
-    )
-
+    parser.add_argument("--model_name", type=str, required=True,
+                        help="Huggingface model name to use")
+    parser.add_argument("--assessment", type=str, required=True,
+                        choices=list(ASSESSMENT_CONFIGS.keys()),
+                        help="Type of assessment to perform")
+    parser.add_argument("--cot", action="store_true",
+                        help="Enable chain-of-thought reasoning")
+    parser.add_argument("--enforce", action="store_true",
+                        help="Enforce LLMs to provide estimation even when uncertain")
+    parser.add_argument("--num_gpus", type=int, default=1,
+                        help="Number of GPUs to use")
+    parser.add_argument("--temperature", type=float, default=0.6,
+                        help="Temperature parameter for sampling")
+    parser.add_argument("--batch_size", type=int, default=4,
+                        help="Batch size for estimation")
+    parser.add_argument("--input_file", type=str,
+                        default="resources/drugs_15980.parquet",
+                        help="Input file containing drug names")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Global random seed for reproducibility")
+    parser.add_argument("--debug", action="store_true",
+                        help="Enable debug mode (process only first 5 drugs and print responses)")
     args = parser.parse_args()
 
     MODEL_NAME_GLOBAL = args.model_name.lower()
-
     manual_seed(args.seed)
     np.random.seed(args.seed)
 
@@ -513,6 +437,11 @@ def main():
     df = pd.read_parquet(args.input_file)
     drugs = df["standard_concept_name"].tolist()
 
+    # If debug flag is enabled, process only the first five drugs.
+    if args.debug:
+        logging.info("Debug mode enabled: processing only the first 5 drugs.")
+        drugs = drugs[:5]
+
     results_df = estimate_probabilities(
         drugs=drugs,
         assessment_name=args.assessment,
@@ -527,6 +456,11 @@ def main():
 
     logging.info(f"Estimation complete. Final dataset shape: {results_df.shape}")
 
+    # If in debug mode, print out the responses for the first five drugs.
+    if args.debug:
+        debug_subset = results_df.head(5)
+        for idx, row in debug_subset.iterrows():
+            logging.info(f"Drug: {row['drug']}\nResponse: {row['llm_response']}\nProbability: {row['probability']}\n{'-'*40}")
 
 if __name__ == "__main__":
     main()
