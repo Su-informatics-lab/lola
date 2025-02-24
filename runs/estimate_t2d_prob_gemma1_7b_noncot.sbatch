@@ -1,5 +1,5 @@
 #!/bin/sh
-#SBATCH --job-name=estimate_t2d_prob_gemma2_9b_cot
+#SBATCH --job-name=estimate_t2d_prob_gemma1_7b_noncot
 ##SBATCH --account=group-jasonclark
 #SBATCH --partition=nextgen-gpu
 #SBATCH --gres=gpu:h100:1
@@ -16,11 +16,9 @@ module load Python/3.10.8-GCCcore-12.2.0
 module load CUDA/12.2.0
 . .venv/bin/activate
 
-
 python estimate_prob_given_drug.py \
---model_name google/gemma-2-9b-it \
+--model_name google/gemma-7b-it \
 --assessment diabetes \
 --num_gpus 1 \
 --batch_size 4 \
---cot \
 --seed 42

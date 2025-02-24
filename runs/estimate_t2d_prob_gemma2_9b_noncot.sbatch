@@ -1,5 +1,5 @@
 #!/bin/sh
-#SBATCH --job-name=estimate_t2d_prob_llama2_9b_noncot
+#SBATCH --job-name=estimate_t2d_prob_gemma2_9b_noncot
 ##SBATCH --account=group-jasonclark
 #SBATCH --partition=nextgen-gpu
 #SBATCH --gres=gpu:h100:1
