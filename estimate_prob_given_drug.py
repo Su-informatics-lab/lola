@@ -54,10 +54,12 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 MAX_MODEL_LENGTH = 4096
+MODEL_NAME_GLOBAL = None
 
 class QueryType(Enum):
     BINARY = "binary"
     ORDINAL = "ordinal"
+
 
 @dataclass
 class AssessmentConfig:
@@ -122,27 +124,6 @@ class AssessmentConfig:
         return base_system_prompt
 
 
-def create_conversation(
-        drug: str, assessment_config: AssessmentConfig, level: Optional[str], cot: bool,
-        enforce: bool = False
-) -> List[Dict]:
-    """
-    Create a conversation template.
-
-    Args:
-        drug: Name of the drug
-        assessment_config: Configuration for the assessment
-        level: Level for ordinal assessments (optional)
-        cot: Whether to include chain-of-thought reasoning
-        enforce: Whether to add enforcement language
-    """
-    prompt = assessment_config.create_prompt(drug, level, cot)
-    system_prompt = assessment_config.get_system_prompt(enforce)
-
-    return [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": prompt},
-    ]
 
 ASSESSMENT_CONFIGS = {
     "diabetes": AssessmentConfig(
@@ -255,6 +236,35 @@ ASSESSMENT_CONFIGS = {
     ),
 
 }
+
+
+def create_conversation(
+        drug: str, assessment_config: AssessmentConfig, level: Optional[str], cot: bool,
+        enforce: bool = False
+) -> List[Dict]:
+    """
+    Create a conversation template.
+    For models that do not support a separate system role (e.g., DeepSeek-R1 and Gemma-2),
+    prepend the system instruction to the user prompt.
+    """
+    # get system prompt; if the model is deepseek-r1, add extra directive for chain-of-thought
+    # refer to https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+    system_prompt = assessment_config.get_system_prompt(enforce)
+    if "deepseek-r1" in MODEL_NAME_GLOBAL:
+        system_prompt += "\nPlease ensure that your answer begins with \"<think>\n\"."
+
+    # reate the base user prompt
+    user_prompt = assessment_config.create_prompt(drug, level, cot)
+
+    # prepend system message to user instruction for models that do not support a system role
+    if ("deepseek-r1" in MODEL_NAME_GLOBAL) or ("gemma-2" in MODEL_NAME_GLOBAL):
+        combined_prompt = f"{system_prompt}\n{user_prompt}"
+        return [{"role": "user", "content": combined_prompt}]
+    else:
+        return [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
 
 
 def extract_probability(response_text: str) -> Optional[float]:
@@ -427,6 +437,7 @@ def estimate_probabilities(
     return final_df
 
 def main():
+    global MODEL_NAME_GLOBAL
     parser = argparse.ArgumentParser(
         description="Estimate medical condition probabilities based on drugs."
     )
@@ -473,6 +484,9 @@ def main():
     )
 
     args = parser.parse_args()
+
+    MODEL_NAME_GLOBAL = args.model_name.lower()
+
     manual_seed(args.seed)
     np.random.seed(args.seed)
 
@@ -480,7 +494,7 @@ def main():
     logging.info(f"Model: {args.model_name}")
     logging.info(f"Assessment: {args.assessment}")
     logging.info(f"Chain of thought: {args.cot}")
-    logging.info(f"Chain of thought: {args.enforce}")
+    logging.info(f"Enforce: {args.enforce}")
 
     llm = LLM(
         model=args.model_name,
@@ -512,6 +526,7 @@ def main():
     )
 
     logging.info(f"Estimation complete. Final dataset shape: {results_df.shape}")
+
 
 if __name__ == "__main__":
     main()
