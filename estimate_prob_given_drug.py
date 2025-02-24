@@ -420,12 +420,18 @@ def main():
     logging.info(f"Chain of thought: {args.cot}")
     logging.info(f"Enforce: {args.enforce}")
 
+    # if using a Gemma1 model, override the architecture in the config
+    hf_overrides = None
+    if "gemma" in MODEL_NAME_GLOBAL:
+        hf_overrides = '{"architectures": ["GemmaForCausalLM"]}'
+
     llm = LLM(
         model=args.model_name,
         tensor_parallel_size=args.num_gpus,
         dtype=torch.bfloat16,
         max_model_len=MAX_MODEL_LENGTH,
-        trust_remote_code=True
+        trust_remote_code=True,
+        hf_overrides=hf_overrides
     )
 
     sampling_params = SamplingParams(
