@@ -425,6 +425,7 @@ def main():
         tensor_parallel_size=args.num_gpus,
         dtype=torch.bfloat16,
         max_model_len=MAX_MODEL_LENGTH,
+        trust_remote_code=True
     )
 
     sampling_params = SamplingParams(
@@ -437,7 +438,7 @@ def main():
     df = pd.read_parquet(args.input_file)
     drugs = df["standard_concept_name"].tolist()
 
-    # If debug flag is enabled, process only the first five drugs.
+    # if debug flag is enabled, process only the first five drugs
     if args.debug:
         logging.info("Debug mode enabled: processing only the first 5 drugs.")
         drugs = drugs[:5]
@@ -456,7 +457,7 @@ def main():
 
     logging.info(f"Estimation complete. Final dataset shape: {results_df.shape}")
 
-    # If in debug mode, print out the responses for the first five drugs.
+    # if in debug mode, print out the responses for the first five drugs
     if args.debug:
         debug_subset = results_df.head(5)
         for idx, row in debug_subset.iterrows():
