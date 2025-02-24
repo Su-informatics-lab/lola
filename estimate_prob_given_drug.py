@@ -232,7 +232,7 @@ def create_conversation(
     if "deepseek-r1" in MODEL_NAME_GLOBAL:
         system_prompt += "\nPlease ensure that your answer begins with \"<think>\n\"."
     user_prompt = assessment_config.create_prompt(drug, level, cot)
-    if ("deepseek-r1" in MODEL_NAME_GLOBAL) or ("gemma-2" in MODEL_NAME_GLOBAL):
+    if ("deepseek-r1" in MODEL_NAME_GLOBAL) or ("gemma" in MODEL_NAME_GLOBAL):
         combined_prompt = f"{system_prompt}\n{user_prompt}"
         return [{"role": "user", "content": combined_prompt}]
     else:
