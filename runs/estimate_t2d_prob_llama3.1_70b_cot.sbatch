@@ -1,10 +1,10 @@
 #!/bin/sh
-#SBATCH --job-name=estimate_t2d_prob_llama3.1_405b
+#SBATCH --job-name=estimate_t2d_prob_llama3.1_70b_cot
 ##SBATCH --account=group-jasonclark
 #SBATCH --partition=nextgen-gpu
-#SBATCH --gres=gpu:h100:4
+#SBATCH --gres=gpu:h100:1
 #SBATCH --cpus-per-task=2
-#SBATCH --mem=256G
+#SBATCH --mem=128G
 #SBATCH --time=2-00:00:00
 #SBATCH --output=logs/%j.out
 #SBATCH --error=logs/%j.err
@@ -17,18 +17,10 @@ module load CUDA/12.2.0
 . .venv/bin/activate
 
 python estimate_prob_given_drug.py \
---model_name meta-llama/Llama-3.1-405B-Instruct \
+--model_name unsloth/Meta-Llama-3.1-70B-Instruct-bnb-4bit \
 --assessment diabetes \
---num_gpus 4 \
---batch_size 2 \
---seed 42
-
-sleep 30
-
-python estimate_prob_given_drug.py \
---model_name meta-llama/Llama-3.1-405B-Instruct \
---assessment diabetes \
---num_gpus 4 \
---batch_size 2 \
+--num_gpus 2 \
+--batch_size 1 \
 --cot \
---seed 42
+--seed 42 \
+--int4
