@@ -503,7 +503,7 @@ def process_drug_combinations(ml_df, df_drugs, df_assoc, baseline_prob,
     Process drug combinations and calculate combined log odds ratios.
     """
     # work on a copy to prevent modifications to the original ml_df
-    ml_df = ml_df.copy()
+    # ml_df = ml_df.copy()
 
     # prepare drug probability dictionary
     drug_prob_dict = prepare_drug_probabilities(df_drugs, df_assoc, prob_col)
