@@ -408,6 +408,8 @@ def main():
                         help="Global random seed for reproducibility")
     parser.add_argument("--debug", action="store_true",
                         help="Enable debug mode (process only first 5 drugs and print responses)")
+    parser.add_argument("--int4", action="store_true",
+                        help="Enable BitsAndBytes 4-bit quantization")
     args = parser.parse_args()
 
     MODEL_NAME_GLOBAL = args.model_name.lower()
@@ -419,15 +421,26 @@ def main():
     logging.info(f"Assessment: {args.assessment}")
     logging.info(f"Chain of thought: {args.cot}")
     logging.info(f"Enforce: {args.enforce}")
+    logging.info(f"Quantization: {args.int4}")
 
-
-    llm = LLM(
-        model=args.model_name,
-        tensor_parallel_size=args.num_gpus,
-        dtype=torch.bfloat16,
-        max_model_len=MAX_MODEL_LENGTH,
-        trust_remote_code=True,
-    )
+    if args.int4:
+        llm = LLM(
+            model=args.model_name,
+            tensor_parallel_size=args.num_gpus,
+            dtype=torch.bfloat16,
+            max_model_len=MAX_MODEL_LENGTH,
+            trust_remote_code=True,
+            quantization="bitsandbytes",
+            load_format="bitsandbytes"
+        )
+    else:
+        llm = LLM(
+            model=args.model_name,
+            tensor_parallel_size=args.num_gpus,
+            dtype=torch.bfloat16,
+            max_model_len=MAX_MODEL_LENGTH,
+            trust_remote_code=True,
+        )
 
     sampling_params = SamplingParams(
         temperature=args.temperature,
