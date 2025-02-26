@@ -19,7 +19,7 @@ module load CUDA/12.2.0
 python estimate_prob_given_drug.py \
 --model_name unsloth/Meta-Llama-3.1-70B-Instruct-bnb-4bit \
 --assessment diabetes \
---num_gpus 2 \
---batch_size 1 \
+--num_gpus 1 \
+--batch_size 4 \
 --seed 42 \
 --int4
