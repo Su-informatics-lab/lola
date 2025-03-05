@@ -18,7 +18,7 @@ module load CUDA/12.2.0
 
 python estimate_prob_given_drug.py \
 --model_name meta-llama/Llama-3.2-3B-Instruct \
---assessment breast_cancer \
+--assessment cancer_breast \
 --num_gpus 1 \
 --batch_size 32 \
 --seed 42
@@ -27,7 +27,7 @@ sleep 30
 
 python estimate_prob_given_drug.py \
 --model_name meta-llama/Llama-3.2-3B-Instruct \
---assessment breast_cancer \
+--assessment cancer_breast \
 --num_gpus 1 \
 --batch_size 32 \
 --seed 42 \
