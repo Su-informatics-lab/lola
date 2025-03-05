@@ -18,7 +18,7 @@ module load CUDA/12.2.0
 
 python estimate_prob_given_drug.py \
 --model_name meta-llama/Llama-3.1-8B-Instruct \
---assessment cancer_breast \
+--assessment breast_cancer \
 --num_gpus 1 \
 --batch_size 4 \
 --cot \
