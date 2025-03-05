@@ -215,7 +215,7 @@ ASSESSMENT_CONFIGS = {
             "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         )
     ),
-    "cancer_breast": AssessmentConfig(
+    "breast_cancer": AssessmentConfig(
         name="breast cancer",
         query_type=QueryType.BINARY,
         question="",
