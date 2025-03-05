@@ -215,6 +215,31 @@ ASSESSMENT_CONFIGS = {
             "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         )
     ),
+    "cancer_breast": AssessmentConfig(
+        name="breast cancer",
+        query_type=QueryType.BINARY,
+        question="",
+        system_prompt=(
+            "You are a medical language model designed to estimate the probability that a patient has breast cancer based on the provided diagnostic codes and medication data. "
+            "For this task, refer to the following ICD codes as definitions for breast cancer:\n\n"
+            "Female Breast Cancer Diagnosis Codes (ICD-10CM & ICD-9CM):\n"
+            "  ICD-10CM: C50.01, C50.011, C50.012, C50.019, C50.1, C50.11, C50.111, C50.112, C50.119, C50.2, C50.21, C50.211, "
+            "C50.212, C50.219, C50.3, C50.31, C50.311, C50.312, C50.319, C50.4, C50.41, C50.411, C50.412, C50.419, C50.5, "
+            "C50.51, C50.511, C50.512, C50.519, C50.6, C50.61, C50.611, C50.612, C50.619, C50.81, C50.811, C50.812, C50.819, "
+            "C50.91, C50.911, C50.912, C50.919, D05, D05.1, D05.10, D05.11, D05.12, D05.8, D05.80, D05.81, D05.82, D05.9, "
+            "D05.90, D05.91, D05.92, 174, 174.0, 174.1, 174.2, 174.3, 174.4, 174.5, 174.6, 174.8, 174.9, 233.0\n\n"
+            "Breast Cancer History Codes:\n"
+            "  ICD-10CM: Z85.3, Z86.000;  ICD-9CM: V10.3\n\n"
+            "Male Breast Cancer Diagnosis Codes (ICD-10CM & ICD-9CM):\n"
+            "  ICD-10CM: C50.02, C50.021, C50.022, C50.029, C50.1, C50.12, C50.121, C50.122, C50.129, C50.2, C50.22, C50.221, "
+            "C50.222, C50.229, C50.3, C50.32, C50.321, C50.322, C50.329, C50.4, C50.42, C50.421, C50.422, C50.429, C50.5, "
+            "C50.52, C50.521, C50.522, C50.529, C50.6, C50.62, C50.621, C50.622, C50.629, C50.82, C50.821, C50.822, C50.829, "
+            "C50.92, C50.921, C50.922, C50.929, D05, D05.1, D05.10, D05.11, D05.12, D05.8, D05.80, D05.81, D05.82, D05.9, "
+            "D05.90, D05.91, D05.92, 175, 175.0, 175.9\n\n"
+            "Estimate the probability that a patient has breast cancer based solely on the provided medication data and diagnostic codes. "
+            "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
+        )
+    ),
 }
 
 def create_conversation(
