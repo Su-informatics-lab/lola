@@ -30,5 +30,5 @@ python estimate_prob_given_drug.py \
 --assessment diabetes \
 --num_gpus 1 \
 --batch_size 64 \
---seed 64 \
+--seed 42 \
 --cot
