@@ -112,7 +112,7 @@ def train_and_evaluate_cv_models(ml_df, unique_comorbidities, model_name, target
         robust_scaler: whether to use robust scaler
     """
     # base features
-    features = ['gender', 'race', 'ethnicity', 'age'] + list(unique_comorbidities)
+    features = ['gender', 'race', 'ethnicity', 'age'] + unique_comorbidities
 
     # add LLM features if specified
     if with_llm_cot:
