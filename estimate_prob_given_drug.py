@@ -259,7 +259,24 @@ ASSESSMENT_CONFIGS = {
             "[ESTIMATION] and [/ESTIMATION] tags."
         )
     ),
-
+    "breast_cancer_simplified": AssessmentConfig(
+        name="breast cancer",
+        query_type=QueryType.BINARY,
+        question="",
+        system_prompt=(
+            "You are a medical language model designed to estimate the probability that a woman has breast cancer based solely on medication data. "
+            "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
+        )
+    ),
+    "alcoholic_hepatitis_simplified": AssessmentConfig(
+        name="alcoholic hepatitis",
+        query_type=QueryType.BINARY,
+        question="",
+        system_prompt=(
+            "You are a medical language model designed to estimate the probability that a patient has alcoholic hepatitis based solely on medication data. "
+            "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
+        )
+    ),
 }
 
 def create_conversation(
