@@ -277,6 +277,15 @@ ASSESSMENT_CONFIGS = {
             "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         )
     ),
+    "alcohol_abuse_simplified": AssessmentConfig(
+        name="alcohol abuse",
+        query_type=QueryType.BINARY,
+        question="",
+        system_prompt=(
+            "You are a medical language model designed to estimate the probability that a patient has alcohol abuse based solely on medication data. "
+            "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
+        )
+    ),
 }
 
 def create_conversation(
