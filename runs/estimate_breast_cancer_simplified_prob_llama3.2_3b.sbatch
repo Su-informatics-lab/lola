@@ -1,8 +1,8 @@
 #!/bin/sh
 #SBATCH --job-name=estimate_breast_cancer_simplified_prob_llama3.2_3b
 ##SBATCH --account=group-jasonclark
-#SBATCH --partition=nextgen-gpu
-#SBATCH --gres=gpu:h100:1
+#SBATCH --partition=gpuunsafe
+#SBATCH --gres=gpu:a40:1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=128G
 #SBATCH --time=2-00:00:00
