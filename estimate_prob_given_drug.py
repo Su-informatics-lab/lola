@@ -286,6 +286,15 @@ ASSESSMENT_CONFIGS = {
             "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         )
     ),
+    "hypertension_simplified": AssessmentConfig(
+        name="hypertension",
+        query_type=QueryType.BINARY,
+        question="",
+        system_prompt=(
+            "You are a medical language model designed to estimate the probability that a patient has hypertension based solely on medication data. "
+            "Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
+        )
+    )
 }
 
 def create_conversation(
