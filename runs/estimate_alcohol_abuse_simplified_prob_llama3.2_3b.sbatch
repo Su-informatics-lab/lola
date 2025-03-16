@@ -1,8 +1,8 @@
 #!/bin/sh
 #SBATCH --job-name=estimate_alcohol_abuse_simplified_prob_llama3.2_3b
 ##SBATCH --account=group-jasonclark
-#SBATCH --partition=gpuunsafe
-#SBATCH --gres=gpu:a40:1
+#SBATCH --partition=nextgen-gpu
+#SBATCH --gres=gpu:h100:1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=128G
 #SBATCH --time=2-00:00:00
@@ -20,7 +20,7 @@ python estimate_prob_given_drug.py \
 --model_name meta-llama/Llama-3.2-3B-Instruct \
 --assessment alcohol_abuse_simplified \
 --num_gpus 1 \
---batch_size 4 \
+--batch_size 8 \
 --seed 42
 
 sleep 30
@@ -29,6 +29,6 @@ python estimate_prob_given_drug.py \
 --model_name meta-llama/Llama-3.2-3B-Instruct \
 --assessment alcohol_abuse_simplified \
 --num_gpus 1 \
---batch_size 4 \
+--batch_size 8 \
 --cot \
 --seed 42
