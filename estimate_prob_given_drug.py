@@ -159,6 +159,14 @@ ASSESSMENT_CONFIGS = {
             "You are a medical language model designed to estimate the probability that a patient has a high-risk AUDIT-C score based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
         ),
     ),
+    "audit_c_simplified": AssessmentConfig(
+        name="high-risk AUDIT-C score (4+ for men, 3+ for women)",
+        query_type=QueryType.BINARY,
+        question="",
+        system_prompt=(
+            "You are a medical language model designed to estimate the probability that a patient has a high-risk AUDIT-C score based on the specific medicine they use. Provide the probability enclosed within [ESTIMATION] and [/ESTIMATION] tags."
+        ),
+    ),
     "fatigue": AssessmentConfig(
         name="fatigue level",
         query_type=QueryType.ORDINAL,
